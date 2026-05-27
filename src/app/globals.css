@@ -1,36 +1,72 @@
 @import "tailwindcss";
 
 /* ================================================
-   设计系统：暗黑数据终端 (Cyberpunk Data Terminal)
+   设计系统 · 现代极简（Linear / Vercel 派系）
+   - 暗色但不死黑：表层叠 8% 白
+   - 字体三层：sans(主) · serif(否) · mono(数字/时间/code)
+   - 主色 emerald；辅助 sky；其余全部灰阶
+   - 圆角偏大 (10/12/14)；阴影偏深、偏柔
+   - 没有 CLI 装饰，但保留 ⌘K、tabular-nums、kbd 样式
    ================================================ */
 
 :root {
-  /* 背景层 */
-  --bg-primary: #0a0a0f;
-  --bg-surface: #111118;
-  --bg-elevated: #161620;
-  --bg-hover: #1a1a24;
+  /* 背景 — 不是纯黑，叠了一点蓝灰 */
+  --bg-primary: #0a0a0c;
+  --bg-surface: #111114;
+  --bg-elevated: #18181c;
+  --bg-hover: #1f1f24;
+  --bg-active: #26262c;
 
-  /* 霓虹色 */
-  --neon-cyan: #00f5d4;
-  --neon-purple: #a855f7;
-  --neon-pink: #ec4899;
-  --neon-green: #22c55e;
-  --neon-amber: #f59e0b;
-  --neon-red: #ef4444;
+  /* 灰阶 */
+  --gray-50: #fafafa;
+  --gray-100: #ededef;
+  --gray-200: #d4d4d8;
+  --gray-300: #a1a1aa;
+  --gray-400: #71717a;
+  --gray-500: #52525b;
+  --gray-600: #3f3f46;
+  --gray-700: #2d2d33;
+  --gray-800: #1f1f24;
+
+  /* 主色：emerald 系，比之前更"鲜活"一点 */
+  --accent: #10b981;
+  --accent-bright: #34d399;
+  --accent-soft: rgba(52, 211, 153, 0.12);
+  --accent-glow: rgba(52, 211, 153, 0.2);
+
+  /* 辅助色：仅在语义场景 */
+  --info: #38bdf8; /* sky-400 */
+  --warning: #f59e0b; /* amber-500 */
+  --danger: #f43f5e; /* rose-500 */
 
   /* 文字 */
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
+  --text-primary: #ededef;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --text-faint: #52525b;
 
   /* 边框 */
-  --border-default: #1e293b;
-  --border-strong: #334155;
+  --border-default: #232328;
+  --border-strong: #2d2d33;
+  --border-subtle: rgba(255, 255, 255, 0.06);
 
   /* 阴影 */
-  --shadow-glow-cyan: 0 0 20px rgba(0, 245, 212, 0.3);
-  --shadow-glow-purple: 0 0 20px rgba(168, 85, 247, 0.3);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.35);
+  --shadow-lg: 0 12px 40px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 0 1px rgba(52, 211, 153, 0.15),
+    0 0 24px rgba(52, 211, 153, 0.08);
+
+  /* 兼容旧 token */
+  --neon-cyan: var(--accent-bright);
+  --neon-green: var(--accent-bright);
+  --neon-amber: var(--warning);
+  --neon-red: var(--danger);
+  --neon-violet: var(--accent);
+  --neon-purple: var(--accent);
+  --neon-pink: var(--accent);
+  --neon-teal: var(--accent-bright);
+  --neon-sky: var(--accent-bright);
 }
 
 @theme inline {
@@ -38,179 +74,252 @@
   --color-bg-surface: var(--bg-surface);
   --color-bg-elevated: var(--bg-elevated);
   --color-bg-hover: var(--bg-hover);
+  --color-bg-active: var(--bg-active);
 
-  --color-neon-cyan: var(--neon-cyan);
-  --color-neon-purple: var(--neon-purple);
-  --color-neon-pink: var(--neon-pink);
-  --color-neon-green: var(--neon-green);
-  --color-neon-amber: var(--neon-amber);
-  --color-neon-red: var(--neon-red);
+  --color-accent: var(--accent);
+  --color-accent-bright: var(--accent-bright);
+  --color-info: var(--info);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
 
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
+  --color-text-faint: var(--text-faint);
 
   --color-border-default: var(--border-default);
   --color-border-strong: var(--border-strong);
+  --color-border-subtle: var(--border-subtle);
+
+  --color-neon-cyan: var(--accent-bright);
+  --color-neon-green: var(--accent-bright);
+  --color-neon-amber: var(--warning);
+  --color-neon-red: var(--danger);
+  --color-neon-violet: var(--accent);
+  --color-neon-purple: var(--accent);
+  --color-neon-pink: var(--accent);
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-html, body {
+html,
+body {
   background: var(--bg-primary);
   color: var(--text-primary);
 }
 
 body {
-  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI",
-    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-geist-sans), "Inter", -apple-system,
+    BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: "cv11", "ss01", "ss03";
+  letter-spacing: -0.005em;
+}
+
+code,
+kbd,
+.mono,
+.tabular {
+  font-family: var(--font-geist-mono), "JetBrains Mono", "Fira Code",
+    ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-feature-settings: "tnum", "zero", "ss01";
+}
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
 }
 
 /* ================================================
-   全局动效定义
+   动画
    ================================================ */
 
-@keyframes pulse-glow {
-  0%, 100% {
+@keyframes pulse-soft {
+  0%,
+  100% {
     opacity: 1;
-    box-shadow: 0 0 8px currentColor, 0 0 16px currentColor;
+    box-shadow: 0 0 0 0 var(--accent-glow);
   }
   50% {
-    opacity: 0.5;
-    box-shadow: 0 0 4px currentColor, 0 0 8px currentColor;
-  }
-}
-
-@keyframes scan-line {
-  0% {
-    transform: translateY(-100%);
-    opacity: 0;
-  }
-  20%, 80% {
-    opacity: 0.8;
-  }
-  100% {
-    transform: translateY(100%);
-    opacity: 0;
+    opacity: 0.85;
+    box-shadow: 0 0 0 4px transparent;
   }
 }
 
 @keyframes shimmer {
-  0% { background-position: -1000px 0; }
-  100% { background-position: 1000px 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-4px); }
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-@keyframes gradient-shift {
+@keyframes spotlight {
+  0% {
+    opacity: 0;
+    transform: translate(-72%, -62%) scale(0.5);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, -40%) scale(1);
+  }
+}
+
+@keyframes aurora-text {
   0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
 }
 
-/* 工具类 */
+/* ================================================
+   工具类
+   ================================================ */
+
 .pulse-dot {
-  animation: pulse-glow 2s ease-in-out infinite;
-}
-
-.glow-border {
-  position: relative;
-}
-
-.glow-border::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  background: linear-gradient(45deg, var(--neon-cyan), var(--neon-purple), var(--neon-pink));
-  border-radius: inherit;
-  opacity: 0;
-  z-index: -1;
-  transition: opacity 0.3s ease;
-}
-
-.glow-border:hover::before {
-  opacity: 0.5;
-}
-
-.scan-line-overlay {
-  position: relative;
-  overflow: hidden;
-}
-
-.scan-line-overlay::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(
-    180deg,
-    transparent 0%,
-    rgba(0, 245, 212, 0.1) 50%,
-    transparent 100%
-  );
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.scan-line-overlay:hover::after {
-  opacity: 1;
-  animation: scan-line 1.5s ease-in-out;
+  animation: pulse-soft 2.4s ease-in-out infinite;
 }
 
 .gradient-text {
-  background: linear-gradient(90deg, var(--neon-cyan), var(--neon-purple), var(--neon-pink));
+  background: linear-gradient(
+    90deg,
+    var(--text-primary) 0%,
+    var(--accent-bright) 60%,
+    var(--text-primary) 100%
+  );
   background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: gradient-shift 6s ease infinite;
 }
 
+/* 玻璃面板：用在 TopBar / 模态 */
 .glass-panel {
-  background: rgba(17, 17, 24, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  background: rgba(17, 17, 20, 0.72);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+/* 卡片 — 默认 + hover */
+.card {
+  background: var(--bg-surface);
   border: 1px solid var(--border-default);
+  border-radius: 12px;
+  transition: border-color 200ms ease, transform 200ms ease, box-shadow 200ms ease;
 }
 
-/* 自定义滚动条 */
+.card-hover:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-elevated);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.card-glow:hover {
+  border-color: rgba(52, 211, 153, 0.3);
+  box-shadow: var(--shadow-glow);
+}
+
+/* 滚动条 — 极细 */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-  background: var(--bg-primary);
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
-  border-radius: 4px;
+  border-radius: 3px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--neon-cyan);
+  background: var(--gray-500);
 }
 
-/* 背景网格效果 */
+/* 选中 */
+::selection {
+  background: var(--accent-soft);
+  color: var(--accent-bright);
+}
+
+/* focus 圈 */
+*:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ================================================
+   背景层
+   ================================================ */
+
+/* 极淡的网格 — 几乎察觉不到，仅在大块留白处提供质感 */
 .bg-grid {
   background-image:
-    linear-gradient(rgba(30, 41, 59, 0.5) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(30, 41, 59, 0.5) 1px, transparent 1px);
+    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.012) 1px, transparent 1px);
   background-size: 40px 40px;
-  background-position: -1px -1px;
 }
 
-.bg-radial-glow {
-  background: radial-gradient(
-    circle at 50% 0%,
-    rgba(168, 85, 247, 0.08) 0%,
-    transparent 50%
+/* 顶部柔光 — 仅在 Hero 显眼 */
+.bg-glow-top {
+  background:
+    radial-gradient(
+      ellipse 60% 50% at 50% 0%,
+      rgba(52, 211, 153, 0.08) 0%,
+      transparent 60%
+    );
+}
+
+/* dot 矩阵 — 用于 hero 装饰 */
+.bg-dots {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 30%, transparent 80%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 50%, black 30%, transparent 80%);
+}
+
+/* skeleton */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 0%,
+    var(--bg-hover) 50%,
+    var(--bg-surface) 100%
   );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* 减弱动画 */
+@media (prefers-reduced-motion: reduce) {
+  .pulse-dot,
+  .gradient-text,
+  .skeleton {
+    animation: none !important;
+  }
 }

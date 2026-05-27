@@ -1,17 +1,18 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, Sparkles } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 interface Props {
   onCreated: () => void;
 }
 
 const PRIORITY_OPTIONS = [
-  { value: "high", label: "高", color: "neon-red" },
-  { value: "medium", label: "中", color: "neon-amber" },
-  { value: "low", label: "低", color: "neon-green" },
+  { value: "high", label: "High", hint: "重要" },
+  { value: "medium", label: "Medium", hint: "默认" },
+  { value: "low", label: "Low", hint: "次要" },
 ];
 
 const DOMAIN_SUGGESTIONS = ["AI编程", "科技", "创业", "AI产品", "投资", "通用"];
@@ -38,7 +39,13 @@ export default function KeywordForm({ onCreated }: Props) {
       });
       if (res.ok) {
         setOpen(false);
-        setForm({ name: "", domain: "通用", priority: "medium", notifyBrowser: true, notifyEmail: false });
+        setForm({
+          name: "",
+          domain: "通用",
+          priority: "medium",
+          notifyBrowser: true,
+          notifyEmail: false,
+        });
         onCreated();
       }
     } finally {
@@ -48,15 +55,13 @@ export default function KeywordForm({ onCreated }: Props) {
 
   return (
     <>
-      <motion.button
+      <button
         onClick={() => setOpen(true)}
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-neon-cyan/20 to-neon-purple/20 border border-neon-cyan/50 hover:border-neon-cyan text-sm font-medium text-neon-cyan transition-all"
+        className="flex items-center gap-1.5 h-8 px-3 rounded-md bg-accent text-bg-primary text-[12.5px] font-medium hover:bg-accent-bright shadow-sm hover:shadow-md transition-all"
       >
-        <Plus className="w-4 h-4" />
-        添加关键词
-      </motion.button>
+        <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
+        Add keyword
+      </button>
 
       <AnimatePresence>
         {open && (
@@ -65,145 +70,119 @@ export default function KeywordForm({ onCreated }: Props) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={() => !submitting && setOpen(false)}
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4"
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.97, y: 6 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              exit={{ opacity: 0, scale: 0.97, y: 6 }}
+              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
               onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md bg-bg-surface border border-border-default rounded-xl p-6 relative overflow-hidden"
+              className="w-full max-w-md card overflow-hidden shadow-lg"
+              style={{ boxShadow: "var(--shadow-lg)" }}
             >
-              <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-neon-cyan to-transparent" />
-
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-5 h-5 text-neon-cyan" />
-                  <h2 className="text-lg font-bold gradient-text">新增监控关键词</h2>
-                </div>
+              <div className="flex items-center justify-between px-5 h-12 border-b border-border-default">
+                <h2 className="text-[14px] font-semibold">Add keyword</h2>
                 <button
                   onClick={() => setOpen(false)}
-                  className="text-text-muted hover:text-text-primary"
+                  className="w-7 h-7 rounded-md flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"
+                  aria-label="关闭"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-4 h-4" />
                 </button>
               </div>
 
-              <div className="space-y-4">
-                {/* 名称 */}
-                <div>
-                  <label className="block text-xs font-mono text-text-secondary mb-2 uppercase tracking-wider">
-                    关键词
-                  </label>
+              <div className="p-5 space-y-4">
+                <Field label="关键词" required>
                   <input
                     type="text"
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    placeholder="例如：Claude 4.7"
+                    placeholder="例：Claude 4.7"
                     autoFocus
-                    className="w-full h-10 px-3 rounded-lg bg-bg-elevated border border-border-default text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-neon-cyan/50 focus:ring-1 focus:ring-neon-cyan/30 transition-all"
+                    className="w-full h-9 px-3 rounded-md bg-bg-elevated border border-border-default text-[13.5px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent-soft transition-all"
                   />
-                </div>
+                </Field>
 
-                {/* 领域 */}
-                <div>
-                  <label className="block text-xs font-mono text-text-secondary mb-2 uppercase tracking-wider">
-                    监控领域
-                  </label>
+                <Field label="监控领域">
                   <input
                     type="text"
                     value={form.domain}
-                    onChange={(e) => setForm({ ...form, domain: e.target.value })}
-                    placeholder="例如：AI编程"
-                    className="w-full h-10 px-3 rounded-lg bg-bg-elevated border border-border-default text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-neon-cyan/50 transition-all mb-2"
+                    onChange={(e) =>
+                      setForm({ ...form, domain: e.target.value })
+                    }
+                    placeholder="例：AI 编程"
+                    className="w-full h-9 px-3 rounded-md bg-bg-elevated border border-border-default text-[13.5px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent/60 focus:ring-2 focus:ring-accent-soft transition-all mb-2"
                   />
                   <div className="flex flex-wrap gap-1.5">
                     {DOMAIN_SUGGESTIONS.map((d) => (
                       <button
                         key={d}
                         onClick={() => setForm({ ...form, domain: d })}
-                        className="px-2 py-1 rounded text-[11px] font-mono bg-bg-hover hover:bg-bg-elevated text-text-secondary hover:text-text-primary transition-colors"
+                        className={cn(
+                          "px-2 h-6 rounded text-[11px] border transition-colors",
+                          form.domain === d
+                            ? "border-accent/40 bg-accent-soft text-accent-bright"
+                            : "border-border-default text-text-muted hover:text-text-secondary hover:border-border-strong",
+                        )}
                       >
                         {d}
                       </button>
                     ))}
                   </div>
-                </div>
+                </Field>
 
-                {/* 优先级 */}
-                <div>
-                  <label className="block text-xs font-mono text-text-secondary mb-2 uppercase tracking-wider">
-                    优先级
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
+                <Field label="优先级">
+                  <div className="grid grid-cols-3 gap-1.5">
                     {PRIORITY_OPTIONS.map((p) => (
                       <button
                         key={p.value}
                         onClick={() => setForm({ ...form, priority: p.value })}
-                        className={`h-10 rounded-lg border text-sm font-medium transition-all ${
+                        className={cn(
+                          "h-9 rounded-md border text-[12.5px] font-medium transition-colors",
                           form.priority === p.value
-                            ? "bg-bg-elevated"
-                            : "bg-bg-hover/50 border-border-default text-text-secondary hover:text-text-primary"
-                        }`}
-                        style={
-                          form.priority === p.value
-                            ? {
-                                borderColor: `var(--${p.color})`,
-                                color: `var(--${p.color})`,
-                                boxShadow: `0 0 8px var(--${p.color}, transparent)`,
-                              }
-                            : undefined
-                        }
+                            ? "border-accent/40 bg-accent-soft text-accent-bright"
+                            : "border-border-default text-text-secondary hover:border-border-strong hover:text-text-primary",
+                        )}
                       >
                         {p.label}
                       </button>
                     ))}
                   </div>
-                </div>
+                </Field>
 
-                {/* 通知方式 */}
-                <div>
-                  <label className="block text-xs font-mono text-text-secondary mb-2 uppercase tracking-wider">
-                    命中通知方式
-                  </label>
-                  <div className="space-y-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={form.notifyBrowser}
-                        onChange={(e) => setForm({ ...form, notifyBrowser: e.target.checked })}
-                        className="w-4 h-4 rounded accent-neon-cyan"
-                      />
-                      <span className="text-sm text-text-primary">浏览器实时推送</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={form.notifyEmail}
-                        onChange={(e) => setForm({ ...form, notifyEmail: e.target.checked })}
-                        className="w-4 h-4 rounded accent-neon-cyan"
-                      />
-                      <span className="text-sm text-text-primary">邮件推送</span>
-                    </label>
+                <Field label="通知方式">
+                  <div className="flex items-center gap-5 text-[13px]">
+                    <Toggle
+                      checked={form.notifyBrowser}
+                      onChange={(v) =>
+                        setForm({ ...form, notifyBrowser: v })
+                      }
+                      label="浏览器推送"
+                    />
+                    <Toggle
+                      checked={form.notifyEmail}
+                      onChange={(v) => setForm({ ...form, notifyEmail: v })}
+                      label="邮件"
+                    />
                   </div>
-                </div>
+                </Field>
               </div>
 
-              {/* 按钮 */}
-              <div className="flex gap-3 mt-6 pt-6 border-t border-border-default">
+              <div className="flex gap-2 px-5 py-3 border-t border-border-default bg-bg-surface/40">
                 <button
                   onClick={() => setOpen(false)}
                   disabled={submitting}
-                  className="flex-1 h-10 rounded-lg border border-border-default text-sm text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50"
+                  className="flex-1 h-9 rounded-md border border-border-strong text-[12.5px] font-medium text-text-secondary hover:text-text-primary hover:bg-bg-hover transition-colors disabled:opacity-50"
                 >
                   取消
                 </button>
                 <button
                   onClick={handleSubmit}
                   disabled={submitting || !form.name.trim()}
-                  className="flex-1 h-10 rounded-lg bg-gradient-to-r from-neon-cyan to-neon-purple text-bg-primary text-sm font-bold transition-all disabled:opacity-50 hover:opacity-90"
+                  className="flex-1 h-9 rounded-md bg-accent text-bg-primary text-[12.5px] font-semibold hover:bg-accent-bright shadow-sm transition-all disabled:opacity-50"
                 >
-                  {submitting ? "添加中..." : "确认添加"}
+                  {submitting ? "创建中…" : "创建"}
                 </button>
               </div>
             </motion.div>
@@ -211,5 +190,66 @@ export default function KeywordForm({ onCreated }: Props) {
         )}
       </AnimatePresence>
     </>
+  );
+}
+
+function Field({
+  label,
+  required,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="block text-[11.5px] font-medium text-text-secondary mb-1.5">
+        {label}
+        {required && <span className="ml-0.5 text-danger">*</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function Toggle({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!checked)}
+      className="flex items-center gap-2 group"
+    >
+      <span
+        className={cn(
+          "relative w-8 h-4.5 rounded-full transition-colors",
+          checked ? "bg-accent" : "bg-bg-active",
+        )}
+        style={{ height: "18px", width: "32px" }}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white shadow transition-transform",
+            checked && "translate-x-[14px]",
+          )}
+        />
+      </span>
+      <span
+        className={cn(
+          "transition-colors",
+          checked ? "text-text-primary" : "text-text-secondary",
+        )}
+      >
+        {label}
+      </span>
+    </button>
   );
 }

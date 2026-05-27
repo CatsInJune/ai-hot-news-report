@@ -1,25 +1,56 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Radio } from "lucide-react";
 import TopicFeed from "@/components/feed/TopicFeed";
 
 export default function HomePage() {
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
+    <div className="max-w-6xl mx-auto px-6 pt-10 pb-8">
+      {/* Hero */}
+      <motion.section
+        initial={{ opacity: 0, y: -6 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mb-8"
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        className="relative mb-10"
       >
-        <div className="flex items-center gap-3 mb-2">
-          <Radio className="w-7 h-7 text-neon-cyan" />
-          <h1 className="text-2xl font-bold gradient-text">实时热点 Feed</h1>
+        <div className="absolute -top-8 -left-12 right-0 h-48 bg-dots pointer-events-none opacity-60" />
+
+        <div className="relative">
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-accent-soft text-accent-bright border border-accent/20 mb-4">
+            <span className="w-1 h-1 rounded-full bg-accent-bright pulse-dot" />
+            Live · 8 sources streaming
+          </span>
+
+          <h1 className="text-[28px] md:text-[34px] font-semibold tracking-tight leading-[1.15] text-text-primary max-w-2xl">
+            AI 帮你<span className="gradient-text">盯着全网</span>
+          </h1>
+
+          <p className="mt-3 max-w-xl text-[14px] text-text-secondary leading-relaxed">
+            8 个源 · 全天候扫描 · 自动过滤噪声 ·{" "}
+            <span className="text-text-primary">命中关键词秒级推送</span>
+          </p>
+
+          {/* 信任锚点 */}
+          <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-text-muted">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="w-1 h-1 rounded-full bg-accent-bright" />
+              Twitter · HN · Bing · Google · 微博 · B站 · 搜狗 · DuckDuckGo
+            </span>
+          </div>
         </div>
-        <p className="text-sm text-text-muted font-mono">
-          // 8 个信息源并行扫描 · AI 智能过滤 · 实时推送
-        </p>
-      </motion.div>
+      </motion.section>
+
+      {/* Section header */}
+      <div className="flex items-baseline justify-between mb-4">
+        <div className="flex items-baseline gap-3">
+          <h2 className="text-[15px] font-semibold text-text-primary">
+            实时 Feed
+          </h2>
+          <span className="text-[11.5px] text-text-muted mono">
+            sorted by hot × time
+          </span>
+        </div>
+      </div>
 
       <TopicFeed />
     </div>

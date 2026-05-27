@@ -53,6 +53,9 @@ export async function analyzeContent(input: AnalyzeInput): Promise<AnalysisResul
         },
       },
       temperature: 0.1,
+      // 输出仅一个小 JSON（6 个字段），1024 token 足够。
+      // 不显式设置时，部分模型默认 32768/65536，会导致免费账户额度不足 (402)。
+      max_tokens: 1024,
     });
 
     const content = response.choices[0]?.message?.content;

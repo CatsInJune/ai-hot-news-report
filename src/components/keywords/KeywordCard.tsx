@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { Trash2, Power, Bell, Mail, Hash } from "lucide-react";
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 
 interface Keyword {
   id: string;
@@ -16,20 +17,22 @@ interface Keyword {
   _count: { topics: number };
 }
 
-interface Props {
+const PRIORITY = {
+  high: { label: "High", tone: "text-warning bg-warning/10 border-warning/25" },
+  medium: { label: "Med", tone: "text-text-secondary bg-bg-hover border-border-strong" },
+  low: { label: "Low", tone: "text-text-muted bg-bg-hover/60 border-border-default" },
+} as const;
+
+export default function KeywordCard({
+  keyword,
+  onChanged,
+}: {
   keyword: Keyword;
   onChanged: () => void;
-}
-
-const PRIORITY_STYLES = {
-  high: { color: "neon-red", label: "高" },
-  medium: { color: "neon-amber", label: "中" },
-  low: { color: "neon-green", label: "低" },
-};
-
-export default function KeywordCard({ keyword, onChanged }: Props) {
+}) {
   const [busy, setBusy] = useState(false);
-  const priority = PRIORITY_STYLES[keyword.priority as keyof typeof PRIORITY_STYLES] ?? PRIORITY_STYLES.medium;
+  const p =
+    PRIORITY[keyword.priority as keyof typeof PRIORITY] ?? PRIORITY.medium;
 
   const toggleActive = async () => {
     setBusy(true);
@@ -58,98 +61,115 @@ export default function KeywordCard({ keyword, onChanged }: Props) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 8 }}
+      initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      className="scan-line-overlay group relative bg-bg-surface border border-border-default rounded-xl p-5 hover:border-neon-cyan/30 transition-all"
+      exit={{ opacity: 0, scale: 0.97 }}
+      className="group card card-hover card-glow p-4"
     >
-      {/* 顶部：状态指示器 */}
-      <div className="absolute inset-x-0 top-0 h-px overflow-hidden rounded-t-xl">
-        <div
-          className={`h-full transition-opacity ${keyword.active ? "opacity-100" : "opacity-20"}`}
-          style={{ background: `linear-gradient(90deg, transparent, var(--${priority.color}), transparent)` }}
-        />
-      </div>
-
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          {/* 状态点 */}
-          <div className="mt-1.5 shrink-0">
-            <div
-              className={`w-2 h-2 rounded-full ${keyword.active ? "pulse-dot" : ""}`}
-              style={{
-                color: keyword.active ? `var(--${priority.color})` : "var(--text-muted)",
-                backgroundColor: keyword.active ? `var(--${priority.color})` : "var(--text-muted)",
-              }}
-            />
-          </div>
-
-          {/* 名称 */}
-          <div className="flex-1 min-w-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <span
+            className={cn(
+              "mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 transition-colors",
+              keyword.active ? "bg-accent-bright pulse-dot" : "bg-text-faint",
+            )}
+          />
+          <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="text-base font-bold text-text-primary truncate">
+              <h3 className="text-[14.5px] font-medium text-text-primary truncate">
                 {keyword.name}
               </h3>
               <span
-                className="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold"
-                style={{
-                  color: `var(--${priority.color})`,
-                  backgroundColor: `color-mix(in srgb, var(--${priority.color}) 15%, transparent)`,
-                }}
+                className={cn(
+                  "px-1.5 h-4 rounded text-[10px] font-medium border flex items-center",
+                  p.tone,
+                )}
               >
-                {priority.label}
+                {p.label}
               </span>
             </div>
-            <div className="flex items-center gap-1 mt-1 text-xs text-text-muted">
-              <Hash className="w-3 h-3" />
+            <div className="flex items-center gap-1 mt-1 text-[11.5px] text-text-muted">
+              <Hash className="w-2.5 h-2.5" />
               <span>{keyword.domain}</span>
             </div>
           </div>
         </div>
 
-        {/* 操作按钮 */}
-        <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
+        <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          <IconBtn
             onClick={toggleActive}
             disabled={busy}
-            className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-              keyword.active
-                ? "text-neon-green hover:bg-bg-hover"
-                : "text-text-muted hover:bg-bg-hover"
-            }`}
-            title={keyword.active ? "暂停监控" : "启用监控"}
+            label={keyword.active ? "暂停监控" : "启用监控"}
+            active={keyword.active}
           >
-            <Power className="w-4 h-4" />
-          </button>
-          <button
+            <Power className="w-3.5 h-3.5" />
+          </IconBtn>
+          <IconBtn
             onClick={handleDelete}
             disabled={busy}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:text-neon-red hover:bg-bg-hover transition-colors"
-            title="删除"
+            label="删除"
+            danger
           >
-            <Trash2 className="w-4 h-4" />
-          </button>
+            <Trash2 className="w-3.5 h-3.5" />
+          </IconBtn>
         </div>
       </div>
 
-      {/* 统计行 */}
-      <div className="flex items-center justify-between pt-3 border-t border-border-default">
-        <div className="flex items-center gap-3 text-xs">
-          <div className="flex items-center gap-1.5 text-text-secondary">
-            <span className="font-mono">命中</span>
-            <span className="text-neon-cyan font-bold font-mono">{keyword._count.topics}</span>
-          </div>
+      <div className="mt-3 pt-3 border-t border-border-default flex items-center justify-between">
+        <div className="flex items-baseline gap-1.5 mono">
+          <span className="text-text-muted text-[11px]">hits</span>
+          <span className="text-[15px] font-semibold text-accent-bright tabular-nums">
+            {keyword._count.topics}
+          </span>
         </div>
-
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {keyword.notifyBrowser && (
-            <Bell className="w-3.5 h-3.5 text-neon-cyan" />
+            <span title="浏览器推送" className="inline-flex p-1 rounded bg-bg-hover">
+              <Bell className="w-3 h-3 text-accent-bright" />
+            </span>
           )}
           {keyword.notifyEmail && (
-            <Mail className="w-3.5 h-3.5 text-neon-purple" />
+            <span title="邮件推送" className="inline-flex p-1 rounded bg-bg-hover">
+              <Mail className="w-3 h-3 text-info" />
+            </span>
           )}
         </div>
       </div>
     </motion.div>
+  );
+}
+
+function IconBtn({
+  onClick,
+  disabled,
+  label,
+  children,
+  active,
+  danger,
+}: {
+  onClick: () => void;
+  disabled?: boolean;
+  label: string;
+  children: React.ReactNode;
+  active?: boolean;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      title={label}
+      className={cn(
+        "w-7 h-7 rounded-md flex items-center justify-center transition-colors",
+        danger
+          ? "text-text-muted hover:text-danger hover:bg-danger/10"
+          : active
+            ? "text-accent-bright hover:bg-bg-hover"
+            : "text-text-muted hover:text-text-primary hover:bg-bg-hover",
+      )}
+    >
+      {children}
+    </button>
   );
 }

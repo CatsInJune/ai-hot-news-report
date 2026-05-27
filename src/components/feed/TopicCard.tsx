@@ -1,10 +1,17 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { ExternalLink, MessageCircle, Heart, Repeat2, Eye } from "lucide-react";
-import ScoreRing from "./ScoreRing";
+import {
+  ExternalLink,
+  MessageCircle,
+  Heart,
+  Repeat2,
+  Eye,
+  Flame,
+} from "lucide-react";
 import { SOURCE_LABELS, SOURCE_COLORS, type SourceType } from "@/types";
 import { formatRelativeTime } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 interface Topic {
   id: string;
@@ -23,115 +30,139 @@ interface Topic {
   views: number;
 }
 
-interface Props {
-  topic: Topic;
-}
-
-export default function TopicCard({ topic }: Props) {
+export default function TopicCard({ topic }: { topic: Topic }) {
   const sourceLabel = SOURCE_LABELS[topic.source as SourceType] ?? topic.source;
-  const sourceColor = SOURCE_COLORS[topic.source as SourceType] ?? "#64748b";
+  const sourceColor = SOURCE_COLORS[topic.source as SourceType] ?? "#71717a";
+  const isHot = topic.hotScore >= 80;
 
   return (
-    <motion.div
+    <motion.article
       layout
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      transition={{ duration: 0.3 }}
-      whileHover={{ y: -2 }}
-      className="scan-line-overlay group relative bg-bg-surface border border-border-default rounded-xl overflow-hidden hover:border-neon-cyan/30 transition-colors"
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.25 }}
+      className="group"
     >
-      {/* 顶部渐变条 */}
-      <div
-        className="h-px"
-        style={{ background: `linear-gradient(90deg, transparent, ${sourceColor}, transparent)` }}
-      />
-
-      <div className="p-5">
-        {/* 头部：来源标签 + 时间 */}
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span
-              className="px-2 py-0.5 rounded text-[10px] font-bold font-mono uppercase tracking-wide"
-              style={{
-                color: sourceColor,
-                backgroundColor: `color-mix(in srgb, ${sourceColor} 15%, transparent)`,
-                border: `1px solid color-mix(in srgb, ${sourceColor} 30%, transparent)`,
-              }}
-            >
-              {sourceLabel}
-            </span>
-            {topic.author && (
-              <span className="text-[11px] text-text-muted truncate max-w-[120px]">
-                @{topic.author}
-              </span>
-            )}
-          </div>
-          <span className="text-[11px] text-text-muted font-mono">
-            {formatRelativeTime(topic.publishedAt)}
-          </span>
-        </div>
-
-        {/* 主体：标题 + 摘要 + 评分 */}
+      <a
+        href={topic.url}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block p-4 transition-colors hover:bg-bg-surface/60 rounded-lg"
+      >
         <div className="flex gap-4 items-start">
+          {/* 左侧：热度评分 */}
+          <ScorePill value={topic.hotScore} />
+
+          {/* 主体 */}
           <div className="flex-1 min-w-0">
-            <h3 className="text-base font-bold text-text-primary leading-snug mb-2 line-clamp-2 group-hover:text-neon-cyan transition-colors">
+            {/* meta */}
+            <div className="flex items-center gap-2 text-[11.5px] mb-1.5">
+              <span
+                className="font-medium uppercase tracking-wider text-[10.5px]"
+                style={{ color: sourceColor }}
+              >
+                {sourceLabel}
+              </span>
+              {topic.author && (
+                <>
+                  <span className="text-text-faint">·</span>
+                  <span className="text-text-muted truncate max-w-[160px]">
+                    @{topic.author}
+                  </span>
+                </>
+              )}
+              <span className="text-text-faint">·</span>
+              <time className="text-text-muted mono">
+                {formatRelativeTime(topic.publishedAt)}
+              </time>
+              {isHot && (
+                <span className="ml-auto inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-warning/12 text-warning border border-warning/25">
+                  <Flame className="w-2.5 h-2.5" />
+                  hot
+                </span>
+              )}
+            </div>
+
+            {/* 标题 */}
+            <h3 className="text-[14.5px] font-medium leading-snug text-text-primary group-hover:text-accent-bright transition-colors line-clamp-2">
               {topic.title}
             </h3>
+
+            {/* 摘要 */}
             {topic.summary && (
-              <p className="text-sm text-text-secondary leading-relaxed line-clamp-3">
+              <p className="mt-1.5 text-[13px] text-text-secondary leading-relaxed line-clamp-2">
                 {topic.summary}
               </p>
             )}
-          </div>
 
-          {/* 评分环 */}
-          <div className="shrink-0 flex flex-col items-center gap-1">
-            <ScoreRing value={topic.hotScore} label="热度" />
+            {/* 互动数据 */}
+            <div className="mt-2.5 flex items-center gap-3.5 text-[11px] text-text-muted mono">
+              {topic.likes > 0 && (
+                <Metric icon={<Heart className="w-3 h-3" />} value={topic.likes} />
+              )}
+              {topic.reposts > 0 && (
+                <Metric
+                  icon={<Repeat2 className="w-3 h-3" />}
+                  value={topic.reposts}
+                />
+              )}
+              {topic.comments > 0 && (
+                <Metric
+                  icon={<MessageCircle className="w-3 h-3" />}
+                  value={topic.comments}
+                />
+              )}
+              {topic.views > 0 && (
+                <Metric icon={<Eye className="w-3 h-3" />} value={topic.views} />
+              )}
+              <span className="ml-auto inline-flex items-center gap-1 text-text-faint opacity-0 group-hover:opacity-100 group-hover:text-accent-bright transition-all">
+                Open
+                <ExternalLink className="w-3 h-3" />
+              </span>
+            </div>
           </div>
         </div>
+      </a>
+    </motion.article>
+  );
+}
 
-        {/* 底部：互动数据 + 原文链接 */}
-        <div className="flex items-center justify-between mt-4 pt-3 border-t border-border-default">
-          <div className="flex items-center gap-4 text-[11px] text-text-muted font-mono">
-            {topic.likes > 0 && (
-              <span className="flex items-center gap-1">
-                <Heart className="w-3 h-3" />
-                {formatCount(topic.likes)}
-              </span>
-            )}
-            {topic.reposts > 0 && (
-              <span className="flex items-center gap-1">
-                <Repeat2 className="w-3 h-3" />
-                {formatCount(topic.reposts)}
-              </span>
-            )}
-            {topic.comments > 0 && (
-              <span className="flex items-center gap-1">
-                <MessageCircle className="w-3 h-3" />
-                {formatCount(topic.comments)}
-              </span>
-            )}
-            {topic.views > 0 && (
-              <span className="flex items-center gap-1">
-                <Eye className="w-3 h-3" />
-                {formatCount(topic.views)}
-              </span>
-            )}
-          </div>
+function ScorePill({ value }: { value: number }) {
+  const v = Math.max(0, Math.min(100, value));
+  const tone =
+    v >= 80
+      ? { fg: "text-warning", bg: "bg-warning/8", ring: "ring-warning/20" }
+      : v >= 60
+        ? { fg: "text-accent-bright", bg: "bg-accent-soft", ring: "ring-accent/20" }
+        : v >= 40
+          ? { fg: "text-text-secondary", bg: "bg-bg-elevated", ring: "ring-border-strong" }
+          : { fg: "text-text-muted", bg: "bg-bg-elevated", ring: "ring-border-default" };
 
-          <a
-            href={topic.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 text-[11px] text-neon-cyan/70 hover:text-neon-cyan font-mono opacity-0 group-hover:opacity-100 transition-opacity"
-          >
-            <span>原文</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-      </div>
-    </motion.div>
+  return (
+    <div
+      className={cn(
+        "shrink-0 w-11 h-11 rounded-lg flex flex-col items-center justify-center ring-1",
+        tone.bg,
+        tone.ring,
+      )}
+    >
+      <span className={cn("text-[15px] font-semibold mono leading-none", tone.fg)}>
+        {v}
+      </span>
+      <span className="text-[8.5px] text-text-faint mono tracking-wider mt-0.5">
+        HOT
+      </span>
+    </div>
+  );
+}
+
+function Metric({ icon, value }: { icon: React.ReactNode; value: number }) {
+  return (
+    <span className="flex items-center gap-1 tabular-nums">
+      {icon}
+      {formatCount(value)}
+    </span>
   );
 }
 
