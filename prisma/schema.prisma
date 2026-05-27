@@ -1,0 +1,80 @@
+// AI热点速报工具 - 数据库 Schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// 关键词监控配置
+model Keyword {
+  id            String   @id @default(cuid())
+  name          String
+  domain        String   @default("通用")
+  active        Boolean  @default(true)
+  priority      String   @default("medium")
+  notifyBrowser Boolean  @default(true)
+  notifyEmail   Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  topics        Topic[]
+}
+
+// 采集到的热点内容
+model Topic {
+  id          String   @id @default(cuid())
+  title       String
+  summary     String?
+  url         String   @unique
+  source      String
+  sourceIcon  String?
+  author      String?
+  publishedAt DateTime
+
+  // AI 分析结果
+  realScore  Int     @default(0)
+  relevScore Int     @default(0)
+  hotScore   Int     @default(0)
+  isSpam     Boolean @default(false)
+  reason     String?
+
+  // 互动数据
+  likes    Int @default(0)
+  reposts  Int @default(0)
+  comments Int @default(0)
+  views    Int @default(0)
+
+  // 关联关键词
+  keywordId String?
+  keyword   Keyword? @relation(fields: [keywordId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([source])
+  @@index([publishedAt])
+  @@index([hotScore])
+  @@index([createdAt])
+}
+
+// 通知记录
+model Notification {
+  id       String   @id @default(cuid())
+  type     String
+  title    String
+  content  String
+  topicUrl String?
+  read     Boolean  @default(false)
+  sentAt   DateTime @default(now())
+
+  @@index([sentAt])
+}
+
+// 系统设置（K-V 存储）
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
