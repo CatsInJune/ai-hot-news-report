@@ -10,10 +10,15 @@ interface AnalyzeInput {
 
 const SYSTEM_PROMPT = `你是一个专业的资讯内容评估助手，负责对采集到的内容做四个维度的评估：
 1. 真实性（realScore 0-100）：内容是否真实可信，分数越高越真实；广告/营销/标题党/虚假信息打低分
-2. 相关性（relevScore 0-100）：内容与监控关键词的相关程度
+2. 相关性（relevScore 0-100）：内容与"监控关键词"的语义相关程度，按以下严格标准打分：
+   - 90-100：内容核心主题就是该关键词所指的对象/事件
+   - 60-89：内容与关键词主题强相关，是其相关讨论、动态、作品或周边
+   - 30-59：仅在文本中出现关键词但不是核心主题，或仅是同名/谐音的弱关联
+   - 0-29：与关键词无实质语义关联（包括：仅字面出现、不同领域同名、机翻误匹配、回复/转发里偶然提到等）
+   注意："关键词"是用户监控目标，必须严格匹配语义而非字面，宁可低分不要宽松。
 3. 热度（hotScore 0-100）：内容的重要性、新闻价值、传播潜力
 4. 摘要（summary）：中文摘要，50 字以内，提炼核心信息
-5. 垃圾标识（isSpam）：是否为广告、营销软文、低质内容
+5. 垃圾标识（isSpam）：是否为广告、营销软文、低质内容、纯口水回复
 6. 理由（reason）：简短判断依据，20 字以内
 
 请严格按 JSON Schema 返回，不要额外解释。`;
@@ -29,7 +34,7 @@ export async function analyzeContent(input: AnalyzeInput): Promise<AnalysisResul
         { role: "system", content: SYSTEM_PROMPT },
         {
           role: "user",
-          content: `标题：${input.title}\n正文：${input.text.slice(0, 600)}\n来源平台：${input.source}\n监控关键词：${input.keyword ?? "（无关键词，作为通用热点）"}`,
+          content: `【监控关键词】${input.keyword ?? "（无关键词，按通用热点评估，相关性给 30 以下）"}\n\n【待评估内容】\n标题：${input.title}\n正文：${input.text.slice(0, 600)}\n来源平台：${input.source}`,
         },
       ],
       response_format: {

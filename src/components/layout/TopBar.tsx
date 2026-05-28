@@ -33,6 +33,7 @@ export default function TopBar() {
   const [unread, setUnread] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
     const tick = async () => {
       try {
         const [a, b] = await Promise.all([
@@ -41,6 +42,7 @@ export default function TopBar() {
             r.ok ? r.json() : null,
           ),
         ]);
+        if (cancelled) return;
         if (a?.stats) setStats(a.stats);
         if (typeof b?.unread === "number") setUnread(b.unread);
       } catch {
@@ -49,7 +51,13 @@ export default function TopBar() {
     };
     tick();
     const id = setInterval(tick, 30_000);
-    return () => clearInterval(id);
+    const onInvalidate = () => tick();
+    window.addEventListener("app:data-changed", onInvalidate);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+      window.removeEventListener("app:data-changed", onInvalidate);
+    };
   }, []);
 
   const handleCollect = async () => {

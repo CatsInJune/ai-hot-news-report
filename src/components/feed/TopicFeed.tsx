@@ -63,6 +63,9 @@ export default function TopicFeed() {
 
   useEffect(() => {
     fetchTopics();
+    const onInvalidate = () => fetchTopics();
+    window.addEventListener("app:data-changed", onInvalidate);
+    return () => window.removeEventListener("app:data-changed", onInvalidate);
   }, [fetchTopics]);
 
   useEffect(() => {
@@ -79,9 +82,12 @@ export default function TopicFeed() {
     };
     tick();
     const id = setInterval(tick, 30_000);
+    const onInvalidate = () => tick();
+    window.addEventListener("app:data-changed", onInvalidate);
     return () => {
       cancelled = true;
       clearInterval(id);
+      window.removeEventListener("app:data-changed", onInvalidate);
     };
   }, []);
 
