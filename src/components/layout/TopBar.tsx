@@ -8,7 +8,6 @@ import {
   Activity,
   Bell,
   RefreshCcw,
-  Search,
   Settings2,
   Sparkles,
   LayoutGrid,
@@ -114,14 +113,6 @@ export default function TopBar() {
 
         <div className="flex-1" />
 
-        {/* 搜索 */}
-        <div className="hidden lg:flex w-64">
-          <button className="group w-full h-8 px-2.5 rounded-md border border-border-default bg-bg-surface/50 hover:bg-bg-hover hover:border-border-strong text-[12.5px] text-text-muted flex items-center gap-2 transition-colors">
-            <Search className="w-3.5 h-3.5" />
-            <span className="flex-1 text-left">Search topics</span>
-            <kbd>⌘K</kbd>
-          </button>
-        </div>
 
         {/* 右侧：状态 + fetch */}
         <div className="flex items-center gap-3 shrink-0">

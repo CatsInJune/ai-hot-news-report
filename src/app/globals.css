@@ -266,11 +266,34 @@ kbd {
   color: var(--accent-bright);
 }
 
-/* focus 圈 */
-*:focus-visible {
+/* focus 圈 — 用 :where() 把基线规则压成 0 特异度，便于按需覆盖 */
+:where(*):focus-visible {
   outline: 2px solid var(--accent-bright);
   outline-offset: 2px;
   border-radius: 6px;
+}
+
+/* 文本输入类元素自带 border 已经表达 focus，不再叠 outline 圈 */
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible {
+  outline: none;
+}
+
+/* Tailwind v4 preflight 不再给 button 默认 cursor:pointer；显式补回 */
+button:not(:disabled),
+[role="button"]:not([aria-disabled="true"]),
+summary,
+a[href],
+label[for],
+select {
+  cursor: pointer;
+}
+
+button:disabled,
+[role="button"][aria-disabled="true"] {
+  cursor: not-allowed;
 }
 
 /* ================================================

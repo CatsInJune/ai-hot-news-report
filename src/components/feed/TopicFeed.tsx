@@ -4,7 +4,8 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Inbox, Sparkles } from "lucide-react";
 import TopicCard from "./TopicCard";
-import SourceTabs from "./SourceTabs";
+import SourceDropdown from "./SourceDropdown";
+import SearchBox from "@/components/layout/SearchBox";
 
 interface Topic {
   id: string;
@@ -28,12 +29,28 @@ export default function TopicFeed() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const [source, setSource] = useState("all");
+  const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
   const [newCount, setNewCount] = useState(0);
+  const [sourceCounts, setSourceCounts] = useState<Record<string, number>>({});
   const eventSourceRef = useRef<EventSource | null>(null);
+
+  useEffect(() => {
+    const term = q.trim();
+    const id = setTimeout(() => setDebouncedQ(term), term ? 220 : 0);
+    return () => clearTimeout(id);
+  }, [q]);
 
   const fetchTopics = useCallback(async () => {
     try {
-      const res = await fetch(`/api/topics?source=${source}&limit=50`);
+      // 搜索是全局的：有 q 时忽略 source 筛选
+      const effectiveSource = debouncedQ ? "all" : source;
+      const params = new URLSearchParams({
+        source: effectiveSource,
+        limit: "50",
+      });
+      if (debouncedQ) params.set("q", debouncedQ);
+      const res = await fetch(`/api/topics?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
         setTopics(data.topics);
@@ -42,11 +59,31 @@ export default function TopicFeed() {
     } finally {
       setLoading(false);
     }
-  }, [source]);
+  }, [source, debouncedQ]);
 
   useEffect(() => {
     fetchTopics();
   }, [fetchTopics]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/topics?stats=sources`);
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (!cancelled) setSourceCounts(data.counts ?? {});
+      } catch {
+        /* silent */
+      }
+    };
+    tick();
+    const id = setInterval(tick, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
 
   useEffect(() => {
     if (eventSourceRef.current) eventSourceRef.current.close();
@@ -65,15 +102,19 @@ export default function TopicFeed() {
     return () => es.close();
   }, []);
 
-  const counts: Record<string, number> = { all: topics.length };
-  for (const t of topics) {
-    counts[t.source] = (counts[t.source] ?? 0) + 1;
-  }
-
   return (
     <div>
-      <div className="flex items-center justify-between gap-4 mb-4 flex-wrap">
-        <SourceTabs active={source} counts={counts} onChange={setSource} />
+      <div className="flex items-center gap-3 mb-4">
+        <SearchBox
+          value={q}
+          onChange={setQ}
+          className="flex-1 min-w-0 max-w-md"
+        />
+        <SourceDropdown
+          active={source}
+          counts={sourceCounts}
+          onChange={setSource}
+        />
         <AnimatePresence>
           {newCount > 0 && (
             <motion.button
@@ -81,7 +122,7 @@ export default function TopicFeed() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
               onClick={fetchTopics}
-              className="flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-accent/30 bg-accent-soft text-[11.5px] font-medium text-accent-bright hover:bg-accent/20 transition-colors"
+              className="flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-accent/30 bg-accent-soft text-[11.5px] font-medium text-accent-bright hover:bg-accent/20 transition-colors shrink-0"
             >
               <Sparkles className="w-3 h-3" />
               {newCount} new · refresh
@@ -100,13 +141,25 @@ export default function TopicFeed() {
         ) : topics.length === 0 ? (
           <div className="py-20 text-center">
             <Inbox className="w-9 h-9 text-text-faint mx-auto mb-3 opacity-50" />
-            <p className="text-text-secondary text-[13.5px] mb-1">
-              No topics yet
-            </p>
-            <p className="text-[11.5px] text-text-muted">
-              Add a keyword and trigger{" "}
-              <kbd>Fetch</kbd> to start.
-            </p>
+            {debouncedQ ? (
+              <>
+                <p className="text-text-secondary text-[13.5px] mb-1">
+                  没有匹配「{debouncedQ}」的话题
+                </p>
+                <p className="text-[11.5px] text-text-muted">
+                  换个关键词或清空搜索
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-text-secondary text-[13.5px] mb-1">
+                  No topics yet
+                </p>
+                <p className="text-[11.5px] text-text-muted">
+                  Add a keyword and trigger <kbd>Fetch</kbd> to start.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <AnimatePresence mode="popLayout">

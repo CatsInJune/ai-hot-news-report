@@ -36,15 +36,20 @@ export async function collectSogou(keyword: string): Promise<RawTopic[]> {
     $(".news-list li, .news-box li").slice(0, 10).each((_: number, el) => {
       const $el = $(el);
       const title = $el.find("h3 a, h4 a").first().text().trim();
-      const url = $el.find("h3 a, h4 a").first().attr("href") ?? "";
+      const raw = $el.find("h3 a, h4 a").first().attr("href") ?? "";
       const snippet = $el.find("p.txt-info, .txt-info").first().text().trim();
       const account = $el.find(".account, .s-p a").first().text().trim();
 
-      if (title && url) {
+      if (title && raw) {
+        const url = raw.startsWith("//")
+          ? `https:${raw}`
+          : raw.startsWith("/")
+            ? `https://weixin.sogou.com${raw}`
+            : raw;
         results.push({
           title,
           summary: snippet,
-          url: url.startsWith("//") ? `https:${url}` : url,
+          url,
           source: "sogou",
           author: account || undefined,
           publishedAt: new Date(),

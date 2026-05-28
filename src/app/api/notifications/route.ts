@@ -14,7 +14,20 @@ export async function GET(req: NextRequest) {
     orderBy: { sentAt: "desc" },
     take: 100,
   });
-  return NextResponse.json({ notifications });
+  return NextResponse.json({
+    notifications: notifications.map((n) => ({
+      ...n,
+      topicUrl: normalizeNotificationUrl(n.topicUrl),
+    })),
+  });
+}
+
+function normalizeNotificationUrl(url: string | null): string | null {
+  if (!url) return null;
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith("//")) return `https:${url}`;
+  if (url.startsWith("/link?")) return `https://weixin.sogou.com${url}`;
+  return null;
 }
 
 export async function PATCH(req: NextRequest) {

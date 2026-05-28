@@ -28,3 +28,25 @@ export function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength) + "...";
 }
+
+const SOURCE_ORIGIN: Record<string, string> = {
+  sogou: "https://weixin.sogou.com",
+  weibo: "https://s.weibo.com",
+  bilibili: "https://www.bilibili.com",
+  bing: "https://www.bing.com",
+  google: "https://news.google.com",
+  duckduckgo: "https://duckduckgo.com",
+  hackernews: "https://news.ycombinator.com",
+  twitter: "https://twitter.com",
+};
+
+export function normalizeTopicUrl(url: string | null | undefined, source: string): string {
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith("//")) return `https:${url}`;
+  if (url.startsWith("/")) {
+    const origin = SOURCE_ORIGIN[source];
+    return origin ? `${origin}${url}` : "";
+  }
+  return "";
+}
