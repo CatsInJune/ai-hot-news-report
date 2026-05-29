@@ -34,7 +34,7 @@ export default function HomePage() {
           <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-text-muted">
             <span className="inline-flex items-center gap-1.5">
               <span className="w-1 h-1 rounded-full bg-accent-bright" />
-              Twitter · HN · Bing · Google · 微博 · B站 · 搜狗 · DuckDuckGo
+              Twitter · HN · Bing · Google · 微博 · B站 · 搜狗
             </span>
           </div>
         </div>
@@ -46,9 +46,6 @@ export default function HomePage() {
           <h2 className="text-[15px] font-semibold text-text-primary">
             实时 Feed
           </h2>
-          <span className="text-[11.5px] text-text-muted mono">
-            sorted by hot × time
-          </span>
         </div>
       </div>
 

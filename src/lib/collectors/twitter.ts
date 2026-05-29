@@ -1,4 +1,5 @@
 import type { RawTopic } from "@/types";
+import { twitterLimiter } from "@/lib/rate-limiter";
 
 const TWITTER_API_BASE = "https://api.twitterapi.io";
 
@@ -26,20 +27,22 @@ async function fetchTweets(
   query: string,
   queryType: "Top" | "Latest"
 ): Promise<Tweet[]> {
-  const params = new URLSearchParams({ query, queryType });
-  const res = await fetch(
-    `${TWITTER_API_BASE}/twitter/tweet/advanced_search?${params}`,
-    {
-      headers: { "X-API-Key": apiKey },
-      signal: AbortSignal.timeout(15000),
+  return twitterLimiter.schedule(async () => {
+    const params = new URLSearchParams({ query, queryType });
+    const res = await fetch(
+      `${TWITTER_API_BASE}/twitter/tweet/advanced_search?${params}`,
+      {
+        headers: { "X-API-Key": apiKey },
+        signal: AbortSignal.timeout(15000),
+      }
+    );
+    if (!res.ok) {
+      console.error(`[Twitter] API ${res.status} (${queryType})`);
+      return [];
     }
-  );
-  if (!res.ok) {
-    console.error(`[Twitter] API ${res.status} (${queryType})`);
-    return [];
-  }
-  const data = await res.json();
-  return data.tweets ?? [];
+    const data = await res.json();
+    return data.tweets ?? [];
+  });
 }
 
 // 复合质量判定：高互动单条放行 / 优质作者 + 轻量互动放行 / 其他丢弃
@@ -97,9 +100,13 @@ export async function collectTwitter(keyword: string): Promise<RawTopic[]> {
       .map((t) => ({
         title: t.text.slice(0, 120),
         summary: t.text,
+        // 推文全文是真正的原文，可放心展开
+        rawContent: t.text,
         url: t.url ?? `https://twitter.com/${t.author?.userName ?? "i"}/status/${t.id}`,
         source: "twitter" as const,
         author: t.author?.name ?? t.author?.userName,
+        authorVerified: t.author?.isBlueVerified,
+        authorFollowers: t.author?.followers,
         publishedAt: t.createdAt ? new Date(t.createdAt) : new Date(),
         likes: t.likeCount ?? 0,
         reposts: t.retweetCount ?? 0,

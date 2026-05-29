@@ -18,6 +18,12 @@ model Keyword {
   priority      String   @default("medium")
   notifyBrowser Boolean  @default(true)
   notifyEmail   Boolean  @default(false)
+  // AI 扩展出的关键词变体 JSON 数组，例如 ["程序员鱼皮","鱼皮","yupi","@yupi996"]
+  // 用于 Pre-match 的字面命中检测，首次采集时通过 AI 生成并缓存
+  aliases       String?
+  // 关联的平台账号 JSON 数组，例如 [{"platform":"twitter","handle":"yupi996"},{"platform":"bilibili","uid":"12345"}]
+  // 用于账号检测：直接拉取该账号的 timeline，绕过关键词搜索
+  accounts      String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   topics        Topic[]
@@ -27,19 +33,32 @@ model Keyword {
 model Topic {
   id          String   @id @default(cuid())
   title       String
+  // AI 生成的 ~50 字摘要，用于卡片紧凑展示
   summary     String?
+  // 采集到的原始描述/正文，用于"展开原文"。可能为空（HN 等）。
+  rawContent  String?
   url         String   @unique
   source      String
   sourceIcon  String?
   author      String?
+  // 作者扩展元数据（目前仅 Twitter 真填，其他源默认 null）
+  authorVerified  Boolean?
+  authorFollowers Int?
   publishedAt DateTime
 
   // AI 分析结果
-  realScore  Int     @default(0)
-  relevScore Int     @default(0)
-  hotScore   Int     @default(0)
-  isSpam     Boolean @default(false)
-  reason     String?
+  realScore        Int     @default(0)
+  relevScore       Int     @default(0)
+  hotScore         Int     @default(0)
+  isSpam           Boolean @default(false)
+  reason           String?
+  // 关键词字面是否被提及（pre-match 结果，区别于 AI 的语义相关性判断）
+  keywordMentioned Boolean @default(false)
+  // 对监控人的重要程度：low / medium / high / urgent
+  // 邮件通知只对 high/urgent 触发，避免轰炸
+  importance       String  @default("medium")
+  // 来源类型：true 表示来自账号 timeline 订阅，false 表示来自关键词搜索
+  subscribed       Boolean @default(false)
 
   // 互动数据
   likes    Int @default(0)

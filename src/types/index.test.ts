@@ -6,21 +6,20 @@ describe("SOURCE_LABELS / SOURCE_COLORS", () => {
     "twitter",
     "bing",
     "google",
-    "duckduckgo",
     "hackernews",
     "sogou",
     "bilibili",
     "weibo",
   ];
 
-  it("8 个源都有 label", () => {
+  it("所有源都有 label", () => {
     for (const s of SOURCES) {
       expect(SOURCE_LABELS[s]).toBeTruthy();
       expect(typeof SOURCE_LABELS[s]).toBe("string");
     }
   });
 
-  it("8 个源都有合法 hex 颜色", () => {
+  it("所有源都有合法 hex 颜色", () => {
     const hex = /^#[0-9A-Fa-f]{6}$/;
     for (const s of SOURCES) {
       expect(SOURCE_COLORS[s]).toMatch(hex);

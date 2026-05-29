@@ -3,42 +3,39 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, ChevronDown } from "lucide-react";
-import { SOURCE_LABELS, type SourceType } from "@/types";
 import { cn } from "@/lib/utils";
 
+export interface FilterOption {
+  value: string;
+  label: string;
+  count?: number;
+}
+
 interface Props {
-  active: string;
-  counts: Record<string, number>;
-  onChange: (source: string) => void;
+  label: string;
+  value: string;
+  options: FilterOption[];
+  onChange: (value: string) => void;
+  // 用于在按钮上显示当前值简短标签（当不想直接展示完整 label 时）
+  shortLabel?: (value: string) => string;
+  // 当 value 不是默认值时高亮按钮
+  defaultValue?: string;
+  className?: string;
 }
 
-const SOURCES: Array<SourceType | "all"> = [
-  "all",
-  "twitter",
-  "bing",
-  "google",
-  "hackernews",
-  "sogou",
-  "bilibili",
-  "weibo",
-];
-
-const LABEL_OVERRIDE: Record<string, string> = {
-  all: "All",
-  twitter: "Twitter",
-  bing: "Bing",
-  google: "Google",
-  hackernews: "HN",
-  sogou: "搜狗",
-  bilibili: "B站",
-  weibo: "微博",
-};
-
-function labelOf(src: string) {
-  return LABEL_OVERRIDE[src] ?? SOURCE_LABELS[src as SourceType] ?? src;
-}
-
-export default function SourceDropdown({ active, counts, onChange }: Props) {
+/**
+ * 通用单选筛选下拉。
+ * 风格对齐 SourceDropdown：紧凑、键盘可关闭、点击外部关闭。
+ */
+export default function FilterDropdown({
+  label,
+  value,
+  options,
+  onChange,
+  shortLabel,
+  defaultValue = "all",
+  className,
+}: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -58,25 +55,24 @@ export default function SourceDropdown({ active, counts, onChange }: Props) {
     };
   }, [open]);
 
-  const activeCount = counts[active] ?? 0;
+  const current = options.find((o) => o.value === value);
+  const display = shortLabel ? shortLabel(value) : current?.label ?? value;
+  const isCustom = value !== defaultValue;
 
   return (
-    <div ref={ref} className="relative shrink-0">
+    <div ref={ref} className={cn("relative shrink-0", className)}>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
           "flex items-center gap-2 h-8 pl-3 pr-2 rounded-md border text-[12.5px] transition-colors",
-          open
+          open || isCustom
             ? "border-accent/40 bg-bg-hover text-text-primary"
             : "border-border-default bg-bg-surface/50 hover:bg-bg-hover hover:border-border-strong text-text-secondary",
         )}
       >
-        <span className="text-text-muted text-[11.5px]">Source</span>
-        <span className="font-medium text-text-primary">{labelOf(active)}</span>
-        <span className="text-[10.5px] mono text-accent-bright tabular-nums">
-          {activeCount}
-        </span>
+        <span className="text-text-muted text-[11.5px]">{label}</span>
+        <span className="font-medium text-text-primary">{display}</span>
         <ChevronDown
           className={cn(
             "w-3.5 h-3.5 text-text-muted transition-transform",
@@ -92,22 +88,21 @@ export default function SourceDropdown({ active, counts, onChange }: Props) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -4 }}
             transition={{ duration: 0.12 }}
-            className="absolute right-0 mt-2 w-56 rounded-lg border border-border-strong bg-bg-elevated shadow-lg overflow-hidden z-30"
+            className="absolute left-0 mt-2 min-w-[10rem] rounded-lg border border-border-strong bg-bg-elevated shadow-lg overflow-hidden z-30"
           >
             <ul className="py-1 max-h-[60vh] overflow-y-auto">
-              {SOURCES.map((src) => {
-                const isActive = active === src;
-                const count = counts[src] ?? 0;
+              {options.map((opt) => {
+                const isActive = value === opt.value;
                 return (
-                  <li key={src}>
+                  <li key={opt.value}>
                     <button
                       type="button"
                       onClick={() => {
-                        onChange(src);
+                        onChange(opt.value);
                         setOpen(false);
                       }}
                       className={cn(
-                        "w-full flex items-center gap-2 px-3 h-8 text-[12.5px] transition-colors",
+                        "w-full flex items-center gap-2 px-3 h-8 text-[12.5px] transition-colors whitespace-nowrap",
                         isActive
                           ? "text-text-primary bg-bg-hover"
                           : "text-text-secondary hover:bg-bg-hover/60 hover:text-text-primary",
@@ -121,17 +116,17 @@ export default function SourceDropdown({ active, counts, onChange }: Props) {
                       >
                         <Check className="w-3 h-3" strokeWidth={3} />
                       </span>
-                      <span className="flex-1 text-left font-medium">
-                        {labelOf(src)}
-                      </span>
-                      <span
-                        className={cn(
-                          "text-[10.5px] mono tabular-nums",
-                          isActive ? "text-accent-bright" : "text-text-faint",
-                        )}
-                      >
-                        {count}
-                      </span>
+                      <span className="flex-1 text-left font-medium">{opt.label}</span>
+                      {typeof opt.count === "number" && (
+                        <span
+                          className={cn(
+                            "text-[10.5px] mono tabular-nums",
+                            isActive ? "text-accent-bright" : "text-text-faint",
+                          )}
+                        >
+                          {opt.count}
+                        </span>
+                      )}
                     </button>
                   </li>
                 );

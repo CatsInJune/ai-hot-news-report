@@ -108,7 +108,7 @@ export default function SettingsPage() {
           label="Firecrawl"
           envVar="FIRECRAWL_API_KEY"
           configured={env?.firecrawl ?? false}
-          hint="网页深度抓取 · 可选"
+          hint="正文抓取 · Bing/Google/HN/Sogou 卡片"
         />
       </Section>
 

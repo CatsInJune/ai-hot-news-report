@@ -6,16 +6,10 @@ export const maxDuration = 120;
 export async function POST() {
   const startedAt = Date.now();
   try {
-    const { total, newCount, results } = await collectAll();
+    const result = await collectAll();
     const elapsed = Date.now() - startedAt;
 
-    return NextResponse.json({
-      ok: true,
-      total,
-      newCount,
-      elapsed,
-      results,
-    });
+    return NextResponse.json({ ok: true, elapsed, ...result });
   } catch (err) {
     return NextResponse.json(
       {

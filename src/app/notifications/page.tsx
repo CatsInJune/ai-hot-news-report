@@ -42,6 +42,8 @@ export default function NotificationsPage() {
       body: JSON.stringify({ markAllRead: true }),
     });
     refresh();
+    // 通知 TopBar 的 unread badge 立刻刷新（否则要等 30s 轮询）
+    window.dispatchEvent(new Event("app:data-changed"));
   };
 
   const unread = items.filter((i) => !i.read).length;

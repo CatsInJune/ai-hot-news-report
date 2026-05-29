@@ -8,7 +8,9 @@ const parser = new Parser({
 
 export async function collectGoogle(keyword: string): Promise<RawTopic[]> {
   try {
-    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(keyword)}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans`;
+    // 加引号做短语精确匹配，避免"鱼皮"被字面拆词匹配到鲅鱼/医疗鱼皮等无关内容
+    const phrase = keyword.includes('"') ? keyword : `"${keyword}"`;
+    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(phrase)}&hl=zh-CN&gl=CN&ceid=CN:zh-Hans`;
     const feed = await parser.parseURL(url);
 
     return feed.items.slice(0, 15).map((item) => ({

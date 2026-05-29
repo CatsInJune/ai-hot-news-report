@@ -47,3 +47,5 @@ next-env.d.ts
 .env.local
 *.db
 *.db-journal
+docs/screenshots/
+tmp-*.log

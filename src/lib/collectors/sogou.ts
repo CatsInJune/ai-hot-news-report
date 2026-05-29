@@ -40,6 +40,13 @@ export async function collectSogou(keyword: string): Promise<RawTopic[]> {
       const snippet = $el.find("p.txt-info, .txt-info").first().text().trim();
       const account = $el.find(".account, .s-p a").first().text().trim();
 
+      // 真实发布时间藏在 <script>timeConvert('1629444955')</script> 里
+      // 没有就跳过这一条——宁可漏不要把陈年文章当新内容
+      const itemHtml = $el.html() ?? "";
+      const tsMatch = itemHtml.match(/timeConvert\(['"](\d{9,11})['"]\)/);
+      if (!tsMatch) return;
+      const publishedAt = new Date(parseInt(tsMatch[1], 10) * 1000);
+
       if (title && raw) {
         const url = raw.startsWith("//")
           ? `https:${raw}`
@@ -49,10 +56,12 @@ export async function collectSogou(keyword: string): Promise<RawTopic[]> {
         results.push({
           title,
           summary: snippet,
+          // 搜狗微信 snippet 是公众号文章开头数句，有信息量，作为原文展示
+          rawContent: snippet || undefined,
           url,
           source: "sogou",
           author: account || undefined,
-          publishedAt: new Date(),
+          publishedAt,
         });
       }
     });

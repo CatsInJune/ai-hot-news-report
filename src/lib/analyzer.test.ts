@@ -1,8 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 /**
- * Mock OpenRouter client。
- * 在 module-level 创建一个可控 spy，注入到 `getOpenRouter()`。
+ * Mock OpenRouter client。在 module-level 创建一个可控 spy。
  */
 const createCompletion = vi.fn();
 
@@ -17,11 +16,22 @@ import { analyzeContent, analyzeBatch } from "./analyzer";
 
 const VALID_JSON = JSON.stringify({
   realScore: 80,
+  keywordMentioned: true,
   relevScore: 70,
   hotScore: 90,
-  summary: "测试摘要",
+  importance: "medium",
   isSpam: false,
+  summary: "测试摘要",
   reason: "看起来真实",
+});
+
+const baseInput = (overrides?: Partial<Parameters<typeof analyzeContent>[0]>) => ({
+  title: "t",
+  text: "x",
+  source: "twitter",
+  keyword: "Claude",
+  preMatch: { matched: true, matchedTerms: ["Claude"] },
+  ...overrides,
 });
 
 beforeEach(() => {
@@ -33,32 +43,28 @@ describe("analyzeContent()", () => {
     createCompletion.mockResolvedValueOnce({
       choices: [{ message: { content: VALID_JSON } }],
     });
-    const r = await analyzeContent({
-      title: "t",
-      text: "x",
-      source: "twitter",
-      keyword: "Claude",
-    });
+    const r = await analyzeContent(baseInput());
     expect(r).toEqual({
       realScore: 80,
+      keywordMentioned: true,
       relevScore: 70,
       hotScore: 90,
-      summary: "测试摘要",
+      importance: "medium",
       isSpam: false,
+      summary: "测试摘要",
       reason: "看起来真实",
     });
   });
 
   /**
    * Bug #1 回归保护：调用必须显式传 max_tokens，且必须 <= 4096。
-   * 否则 OpenRouter 会按模型默认 32768/65536 预扣额度，
-   * 免费账户直接 402 失败，导致全部 topic 无 AI 评分。
+   * 否则 OpenRouter 会按模型默认 32768/65536 预扣额度，免费账户直接 402 失败。
    */
   it("[regression] 必须显式传 max_tokens 且 <= 4096", async () => {
     createCompletion.mockResolvedValueOnce({
       choices: [{ message: { content: VALID_JSON } }],
     });
-    await analyzeContent({ title: "t", text: "x", source: "bing" });
+    await analyzeContent(baseInput());
 
     const callArg = createCompletion.mock.calls[0][0];
     expect(callArg.max_tokens).toBeDefined();
@@ -67,44 +73,47 @@ describe("analyzeContent()", () => {
     expect(callArg.max_tokens).toBeLessThanOrEqual(4096);
   });
 
-  it("用了 json_schema 严格模式", async () => {
+  it("用 json_object 格式（DeepSeek/OpenAI/OpenRouter 通用）+ system prompt 列出所有必填字段", async () => {
     createCompletion.mockResolvedValueOnce({
       choices: [{ message: { content: VALID_JSON } }],
     });
-    await analyzeContent({ title: "t", text: "x", source: "google" });
+    await analyzeContent(baseInput());
     const arg = createCompletion.mock.calls[0][0];
-    expect(arg.response_format?.type).toBe("json_schema");
-    expect(arg.response_format?.json_schema?.strict).toBe(true);
-    expect(arg.response_format?.json_schema?.schema?.required).toEqual(
-      expect.arrayContaining([
-        "realScore",
-        "relevScore",
-        "hotScore",
-        "summary",
-        "isSpam",
-        "reason",
-      ]),
-    );
+    expect(arg.response_format?.type).toBe("json_object");
+    // schema 字段定义在 system prompt 文本里
+    const sysMsg = arg.messages.find((m: { role: string }) => m.role === "system");
+    for (const f of [
+      "realScore",
+      "keywordMentioned",
+      "relevScore",
+      "hotScore",
+      "importance",
+      "isSpam",
+      "summary",
+      "reason",
+    ]) {
+      expect(sysMsg.content).toContain(f);
+    }
   });
 
-  it("正文超长截断到 600 字（控制 token 用量）", async () => {
+  it("正文超长截断到 1500 字（控制 token 用量）", async () => {
     createCompletion.mockResolvedValueOnce({
       choices: [{ message: { content: VALID_JSON } }],
     });
-    const longText = "啊".repeat(2000);
-    await analyzeContent({ title: "t", text: longText, source: "weibo" });
+    const longText = "啊".repeat(3000);
+    await analyzeContent(baseInput({ text: longText }));
     const userMsg = createCompletion.mock.calls[0][0].messages.find(
       (m: { role: string }) => m.role === "user",
     );
-    // 期望正文部分 <= 600 字（前后还有标题/来源等元数据，总长 < 1200）
-    expect(userMsg.content.length).toBeLessThan(1200);
+    // 期望正文部分 <= 1500 字（前后还有标题/来源/hint，总长 < 2000）
+    expect(userMsg.content.length).toBeLessThan(2000);
   });
 
   it("temperature 设置 ≤ 0.3（评分要稳定）", async () => {
     createCompletion.mockResolvedValueOnce({
       choices: [{ message: { content: VALID_JSON } }],
     });
-    await analyzeContent({ title: "t", text: "x", source: "bing" });
+    await analyzeContent(baseInput());
     const t = createCompletion.mock.calls[0][0].temperature;
     expect(t).toBeLessThanOrEqual(0.3);
   });
@@ -112,7 +121,7 @@ describe("analyzeContent()", () => {
   it("API 抛错 → 返回 null（降级，不冒泡）", async () => {
     createCompletion.mockRejectedValueOnce(new Error("402 credits"));
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const r = await analyzeContent({ title: "t", text: "x", source: "bing" });
+    const r = await analyzeContent(baseInput());
     expect(r).toBeNull();
     expect(errSpy).toHaveBeenCalled();
     errSpy.mockRestore();
@@ -122,7 +131,7 @@ describe("analyzeContent()", () => {
     createCompletion.mockResolvedValueOnce({
       choices: [{ message: { content: null } }],
     });
-    const r = await analyzeContent({ title: "t", text: "x", source: "bing" });
+    const r = await analyzeContent(baseInput());
     expect(r).toBeNull();
   });
 
@@ -131,36 +140,64 @@ describe("analyzeContent()", () => {
       choices: [{ message: { content: "not json" } }],
     });
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
-    const r = await analyzeContent({ title: "t", text: "x", source: "bing" });
+    const r = await analyzeContent(baseInput());
     expect(r).toBeNull();
     errSpy.mockRestore();
   });
 
-  it("传入 keyword 时 user prompt 包含该关键词", async () => {
+  it("user prompt 包含关键词", async () => {
     createCompletion.mockResolvedValueOnce({
       choices: [{ message: { content: VALID_JSON } }],
     });
-    await analyzeContent({
-      title: "t",
-      text: "x",
-      source: "bing",
-      keyword: "Claude Code",
-    });
+    await analyzeContent(baseInput({ keyword: "Claude Code" }));
     const userMsg = createCompletion.mock.calls[0][0].messages.find(
       (m: { role: string }) => m.role === "user",
     );
     expect(userMsg.content).toContain("Claude Code");
   });
 
-  it("不传 keyword 时 user prompt 标记无关键词", async () => {
+  it("preMatch.matched=true 时 prompt 应该列出命中的变体", async () => {
     createCompletion.mockResolvedValueOnce({
       choices: [{ message: { content: VALID_JSON } }],
     });
-    await analyzeContent({ title: "t", text: "x", source: "bing" });
+    await analyzeContent(
+      baseInput({ preMatch: { matched: true, matchedTerms: ["yupi", "@yupi996"] } }),
+    );
     const userMsg = createCompletion.mock.calls[0][0].messages.find(
       (m: { role: string }) => m.role === "user",
     );
-    expect(userMsg.content).toContain("无关键词");
+    expect(userMsg.content).toContain("yupi");
+    expect(userMsg.content).toContain("@yupi996");
+  });
+
+  it("preMatch.matched=false 时 prompt 应该提示严格审核", async () => {
+    createCompletion.mockResolvedValueOnce({
+      choices: [{ message: { content: VALID_JSON } }],
+    });
+    await analyzeContent(baseInput({ preMatch: { matched: false, matchedTerms: [] } }));
+    const userMsg = createCompletion.mock.calls[0][0].messages.find(
+      (m: { role: string }) => m.role === "user",
+    );
+    expect(userMsg.content).toMatch(/没有|严格/);
+  });
+
+  it("[强约束] preMatch.matched=false 且 keywordMentioned=false 时，relevScore 强制 ≤25", async () => {
+    // AI 不老实给了 80，但因为 preMatch 没命中且 keywordMentioned=false，应被强制压回 ≤25
+    const looseJson = JSON.stringify({
+      realScore: 80,
+      keywordMentioned: false,
+      relevScore: 80,
+      hotScore: 50,
+      importance: "low",
+      isSpam: false,
+      summary: "x",
+      reason: "y",
+    });
+    createCompletion.mockResolvedValueOnce({
+      choices: [{ message: { content: looseJson } }],
+    });
+    const r = await analyzeContent(baseInput({ preMatch: { matched: false, matchedTerms: [] } }));
+    expect(r?.relevScore).toBeLessThanOrEqual(25);
   });
 });
 
@@ -171,7 +208,7 @@ describe("analyzeBatch()", () => {
     });
     const items = Array.from({ length: 12 }, (_, i) => ({
       id: `t${i}`,
-      input: { title: `T${i}`, text: "x", source: "bing" },
+      input: baseInput({ title: `T${i}` }),
     }));
     const m = await analyzeBatch(items);
     expect(m.size).toBe(12);
@@ -180,21 +217,17 @@ describe("analyzeBatch()", () => {
 
   it("部分失败的条目不进 result map（不污染数据库）", async () => {
     createCompletion
-      .mockResolvedValueOnce({
-        choices: [{ message: { content: VALID_JSON } }],
-      })
+      .mockResolvedValueOnce({ choices: [{ message: { content: VALID_JSON } }] })
       .mockRejectedValueOnce(new Error("fail"))
-      .mockResolvedValueOnce({
-        choices: [{ message: { content: VALID_JSON } }],
-      });
+      .mockResolvedValueOnce({ choices: [{ message: { content: VALID_JSON } }] });
     const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const m = await analyzeBatch([
-      { id: "a", input: { title: "T", text: "x", source: "bing" } },
-      { id: "b", input: { title: "T", text: "x", source: "bing" } },
-      { id: "c", input: { title: "T", text: "x", source: "bing" } },
+      { id: "a", input: baseInput() },
+      { id: "b", input: baseInput() },
+      { id: "c", input: baseInput() },
     ]);
     expect(m.has("a")).toBe(true);
-    expect(m.has("b")).toBe(false); // 失败的不入
+    expect(m.has("b")).toBe(false);
     expect(m.has("c")).toBe(true);
     errSpy.mockRestore();
   });

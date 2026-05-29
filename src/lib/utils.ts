@@ -35,7 +35,6 @@ const SOURCE_ORIGIN: Record<string, string> = {
   bilibili: "https://www.bilibili.com",
   bing: "https://www.bing.com",
   google: "https://news.google.com",
-  duckduckgo: "https://duckduckgo.com",
   hackernews: "https://news.ycombinator.com",
   twitter: "https://twitter.com",
 };

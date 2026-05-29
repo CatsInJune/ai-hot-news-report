@@ -29,11 +29,17 @@ async function searchHN(keyword: string): Promise<HNItem[]> {
   }));
 }
 
+// 判断是否包含中文字符——HN 是英文社区，纯中文关键词搜索命中率几乎为 0，跳过省 AI token
+function hasChinese(s: string): boolean {
+  return /[\u4e00-\u9fff]/.test(s);
+}
+
 export async function collectHackerNews(keyword?: string): Promise<RawTopic[]> {
   try {
     let items: HNItem[];
 
     if (keyword) {
+      if (hasChinese(keyword)) return [];
       items = await searchHN(keyword);
     } else {
       // 无关键词时拉取 topstories Top 20

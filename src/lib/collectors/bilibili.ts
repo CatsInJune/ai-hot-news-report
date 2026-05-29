@@ -1,5 +1,6 @@
 import axios from "axios";
 import type { RawTopic } from "@/types";
+import { bilibiliLimiter } from "@/lib/rate-limiter";
 
 const HEADERS = {
   "User-Agent":
@@ -20,13 +21,12 @@ interface BiliVideo {
 
 export async function collectBilibili(keyword: string): Promise<RawTopic[]> {
   try {
-    const res = await axios.get(
-      "https://api.bilibili.com/x/web-interface/search/type",
-      {
+    const res = await bilibiliLimiter.schedule(() =>
+      axios.get("https://api.bilibili.com/x/web-interface/search/type", {
         params: { search_type: "video", keyword, order: "pubdate", page: 1 },
         headers: HEADERS,
         timeout: 12000,
-      }
+      })
     );
 
     if (res.data?.code !== 0) {
