@@ -241,17 +241,40 @@ export async function collectAll(): Promise<{
   droppedByQuota = inQuotaInput - finalCandidates.length;
 
   // 抓正文：对 bing/google/hackernews/sogou 这些 URL 指向真实文章的源，
-  // 在落库前并发抓 Readability(+Firecrawl 兜底)，把全文写入 rawContent
+  // 在落库前并发抓 Firecrawl + LLM 清洗，把全文写入 rawContent。
+  // 跳过指向社交媒体的 URL——这些站点我们有原生采集器（twitter），
+  // 网页抓回来的是"原帖 + 他人回复 + 互动数据"混合体，不是文章。
+  const SOCIAL_HOSTS = /(?:^|\.)((x|twitter|t)\.co|x\.com|twitter\.com|mastodon\.[\w-]+|bsky\.app|threads\.net)$/i;
+  const isSocialUrl = (u: string): boolean => {
+    try {
+      return SOCIAL_HOSTS.test(new URL(u).hostname);
+    } catch {
+      return false;
+    }
+  };
+
   const extractMap = new Map<number, string>(); // idx -> extracted content
-  const toExtract: { idx: number; url: string }[] = [];
+  const toExtract: { idx: number; url: string; title?: string }[] = [];
+  let skippedSocial = 0;
   for (const cand of finalCandidates) {
     if (!SCRAPABLE_SOURCES.has(cand.item.topic.source)) continue;
     if (!cand.item.topic.url) continue;
-    toExtract.push({ idx: cand.idx, url: cand.item.topic.url });
+    if (isSocialUrl(cand.item.topic.url)) {
+      skippedSocial++;
+      continue;
+    }
+    toExtract.push({
+      idx: cand.idx,
+      url: cand.item.topic.url,
+      title: cand.item.topic.title,
+    });
+  }
+  if (skippedSocial > 0) {
+    console.log(`[Extract] skipped ${skippedSocial} social-media URL(s)`);
   }
   if (toExtract.length > 0) {
     const extracted = await extractContentBatch(
-      toExtract.map((t) => t.url),
+      toExtract.map((t) => ({ url: t.url, title: t.title })),
       5,
     );
     toExtract.forEach(({ idx }, i) => {

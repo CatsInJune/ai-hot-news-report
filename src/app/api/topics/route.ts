@@ -59,7 +59,8 @@ export async function GET(req: NextRequest) {
 
   // === 列表查询 ===
   const source = searchParams.get("source");
-  const limit = parseInt(searchParams.get("limit") ?? "30");
+  const limit = Math.min(parseInt(searchParams.get("limit") ?? "30"), 100);
+  const offset = Math.max(parseInt(searchParams.get("offset") ?? "0"), 0);
   const q = searchParams.get("q")?.trim();
 
   // 新增筛选参数
@@ -103,18 +104,28 @@ export async function GET(req: NextRequest) {
   if (sourceType === "subscribed") where.subscribed = true;
   else if (sourceType === "search") where.subscribed = false;
 
-  // 综合分排序需要 JS 端算（依赖时间衰减），先 take 多一点候选；其他排序统一走应用层逻辑保持一致
-  const fetchLimit = sort === "composite" ? Math.max(limit * 3, 100) : limit * 2;
+  // 综合分排序需要 JS 端算（依赖时间衰减），所以要 take 完整 offset+limit 的候选池后再 slice
+  const fetchLimit = sort === "composite"
+    ? Math.max((offset + limit) * 3, 100)
+    : Math.max((offset + limit) * 2, 60);
 
-  const candidates = await prisma.topic.findMany({
-    where,
-    orderBy: [{ hotScore: "desc" }, { publishedAt: "desc" }],
-    take: fetchLimit,
-  });
+  // 并发：拉候选 + 算总数（同 where 条件）
+  const [candidates, total] = await Promise.all([
+    prisma.topic.findMany({
+      where,
+      orderBy: [{ hotScore: "desc" }, { publishedAt: "desc" }],
+      take: fetchLimit,
+    }),
+    prisma.topic.count({ where }),
+  ]);
 
-  const sorted = sortTopics(candidates, sort).slice(0, limit);
+  const allSorted = sortTopics(candidates, sort);
+  const pageItems = allSorted.slice(offset, offset + limit);
 
   return NextResponse.json({
-    topics: sorted.map((t) => ({ ...t, url: normalizeTopicUrl(t.url, t.source) })),
+    topics: pageItems.map((t) => ({ ...t, url: normalizeTopicUrl(t.url, t.source) })),
+    total,
+    offset,
+    limit,
   });
 }

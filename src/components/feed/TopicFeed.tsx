@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo, useLayoutEffect } from "react";
 import { AnimatePresence } from "framer-motion";
-import { Inbox, RotateCcw, ChevronsDown } from "lucide-react";
+import { Inbox, RotateCcw, ChevronsDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import TopicCard from "./TopicCard";
 import SourceDropdown from "./SourceDropdown";
 import FilterDropdown from "./FilterDropdown";
@@ -88,9 +88,13 @@ const SORT_HINT_BY_KEY: Record<string, string> = {
   hot: "hotScore desc",
 };
 
+const PAGE_SIZE = 10;
+
 export default function TopicFeed() {
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [source, setSource] = useState("all");
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
@@ -138,12 +142,27 @@ export default function TopicFeed() {
     };
   }, []);
 
+  // page 通过 ref 让 fetchTopics 不依赖它，避免 setPage → fetchTopics 重建 → useEffect 重新触发的循环
+  const pageRef = useRef(1);
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+
+  // 分页器是 fixed 定位，永远悬浮视窗底部。navRef 仍保留供后续可能的扩展用
+  const navRef = useRef<HTMLElement | null>(null);
+  // 翻页时滚到 cards 容器顶部（feed 列表起点），让用户从头看新内容
+  const cardsContainerRef = useRef<HTMLDivElement | null>(null);
+  const shouldScrollToTopRef = useRef(false);
+
+  /** 拉取当前页（page state 通过 ref 读，不进依赖）。SSE 刷新和筛选变更都走这一条路径 */
   const fetchTopics = useCallback(async () => {
     try {
       const effectiveSource = debouncedQ ? "all" : source;
+      const offset = (pageRef.current - 1) * PAGE_SIZE;
       const params = new URLSearchParams({
         source: effectiveSource,
-        limit: "50",
+        limit: String(PAGE_SIZE),
+        offset: String(offset),
         sort,
       });
       if (debouncedQ) params.set("q", debouncedQ);
@@ -157,24 +176,60 @@ export default function TopicFeed() {
       const res = await fetch(`/api/topics?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
-        setTopics(data.topics);
+        setTopics(data.topics ?? []);
+        setTotal(data.total ?? 0);
       }
     } finally {
       setLoading(false);
     }
   }, [source, debouncedQ, range, importance, keywordId, mentioned, relevBucket, sourceType, sort]);
 
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
+
+  /**
+   * 切页：标记"需要滚到 cards 顶部"，setPage 触发拉新数据；
+   * topics 渲染完成后 useLayoutEffect 把 cards 顶部对齐到视窗（带平滑滚动）。
+   * 配合 fixed 分页器：用户切完页直接看到新一页第一条，分页器始终在视窗底部触手可及。
+   */
+  const goToPage = useCallback((next: number) => {
+    const clamped = Math.max(1, Math.min(pageCount, next));
+    if (clamped === pageRef.current) return;
+    shouldScrollToTopRef.current = true;
+    setPage(clamped);
+  }, [pageCount]);
+
+  // topics 变化后把 cards 容器顶部对齐到视窗——用 instant scroll（不 smooth），
+  // 把视觉舞台让给 cards 的错峰滑入动画。两个动画叠在一起会模糊感知。
+  useLayoutEffect(() => {
+    if (!shouldScrollToTopRef.current || !cardsContainerRef.current) return;
+    shouldScrollToTopRef.current = false;
+    const cardTop = cardsContainerRef.current.getBoundingClientRect().top;
+    const targetOffset = 80;
+    const delta = cardTop - targetOffset;
+    if (Math.abs(delta) > 1) {
+      window.scrollBy({ top: delta, behavior: "instant" as ScrollBehavior });
+    }
+  }, [topics]);
+
   // 同步最新 fetchTopics 到 ref，供 SSE handler 调用
   useEffect(() => {
     fetchRef.current = fetchTopics;
   }, [fetchTopics]);
 
+  // 筛选/排序变更：重置到第 1 页（page N 在新筛选下可能不存在）
+  const filterFingerprint = `${source}|${debouncedQ}|${range}|${importance.join(",")}|${keywordId}|${mentioned}|${relevBucket}|${sourceType}|${sort}`;
+  useEffect(() => {
+    setPage(1);
+    pageRef.current = 1;
+  }, [filterFingerprint]);
+
+  // page / filter 变更 → 拉数据
   useEffect(() => {
     fetchTopics();
     const onInvalidate = () => fetchTopics();
     window.addEventListener("app:data-changed", onInvalidate);
     return () => window.removeEventListener("app:data-changed", onInvalidate);
-  }, [fetchTopics]);
+  }, [fetchTopics, page]);
 
   useEffect(() => {
     let cancelled = false;
@@ -348,7 +403,7 @@ export default function TopicFeed() {
         )}
       </div>
 
-      <div className="card overflow-hidden divide-y divide-border-default">
+      <div ref={cardsContainerRef} className="card divide-y divide-border-default overflow-hidden">
         {loading ? (
           <div className="py-2">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -389,13 +444,31 @@ export default function TopicFeed() {
             )}
           </div>
         ) : (
-          <AnimatePresence mode="popLayout">
-            {topics.map((t) => (
-              <TopicCard key={t.id} topic={t} expandAll={expandAll} />
+          // key={page} 让整个列表在翻页时强制 remount——所有 TopicCard 重新走 initial→animate，
+          // 触发完整的错峰瀑布滑入。SSE 更新 page 不变，已渲染卡保持，新增卡仍可独立动画
+          <div key={`p-${page}`} className="contents">
+            {topics.map((t, i) => (
+              <TopicCard key={t.id} topic={t} expandAll={expandAll} index={i} />
             ))}
-          </AnimatePresence>
+          </div>
         )}
       </div>
+
+      {/* 分页器：fixed 定位悬浮在视窗底部，完全脱离文档流。
+          docHeight/scrollY 怎么变都不会影响其视觉位置。 */}
+      {pageCount > 1 && !loading && topics.length > 0 && (
+        <Pagination
+          page={page}
+          pageCount={pageCount}
+          total={total}
+          pageSize={PAGE_SIZE}
+          onChange={goToPage}
+          navRef={navRef}
+        />
+      )}
+
+      {/* 底部留白：让 cards 能滚动到 fixed nav 之上，不被 nav 遮挡 */}
+      {pageCount > 1 && <div aria-hidden className="h-20" />}
     </div>
   );
 }
@@ -410,5 +483,179 @@ function SkeletonRow() {
         <div className="h-3 w-2/3 rounded skeleton" />
       </div>
     </div>
+  );
+}
+
+/**
+ * 生成带省略号的页码序列。如 page=7 pageCount=20 → [1, '…', 5, 6, 7, 8, 9, '…', 20]
+ * 永远显示首页 + 末页 + 当前页两侧 2 页。
+ */
+function buildPageItems(page: number, pageCount: number): (number | "…")[] {
+  if (pageCount <= 7) {
+    return Array.from({ length: pageCount }, (_, i) => i + 1);
+  }
+  const items: (number | "…")[] = [1];
+  const left = Math.max(2, page - 2);
+  const right = Math.min(pageCount - 1, page + 2);
+  if (left > 2) items.push("…");
+  for (let i = left; i <= right; i++) items.push(i);
+  if (right < pageCount - 1) items.push("…");
+  items.push(pageCount);
+  return items;
+}
+
+function Pagination({
+  page,
+  pageCount,
+  total,
+  pageSize,
+  onChange,
+  navRef,
+}: {
+  page: number;
+  pageCount: number;
+  total: number;
+  pageSize: number;
+  onChange: (next: number) => void;
+  navRef?: React.MutableRefObject<HTMLElement | null>;
+}) {
+  const items = buildPageItems(page, pageCount);
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+  // fixed 定位：让分页器完全脱离文档流，永远悬浮在视窗底部。
+  // 这样 docHeight / scrollY 怎么变都不会影响 nav 视觉位置。
+  // 外层 fixed 横跨视窗，内层 max-w-6xl + mx-auto 与 feed 列宽对齐。
+  return (
+    <div className="fixed inset-x-0 bottom-3 z-30 px-6 pointer-events-none">
+      <div className="max-w-6xl mx-auto">
+        <nav
+          ref={navRef}
+          aria-label="分页"
+          className="pointer-events-auto flex flex-wrap items-center justify-between gap-4 px-3 py-2 rounded-lg bg-bg-surface/95 backdrop-blur-md ring-1 ring-border-default shadow-lg shadow-black/30 supports-backdrop-filter:bg-bg-surface/80"
+        >
+      {/* 左：范围文字 */}
+      <div className="flex items-baseline gap-1.5 text-[11.5px] text-text-muted">
+        <span className="mono tabular-nums text-text-secondary">{start}–{end}</span>
+        <span className="text-text-faint">of</span>
+        <span className="mono tabular-nums text-text-secondary">{total}</span>
+      </div>
+
+      {/* 右：页码控件 */}
+      <div className="inline-flex items-center gap-0.5">
+        <PageNavBtn
+          disabled={page <= 1}
+          onClick={() => onChange(1)}
+          ariaLabel="第一页"
+        >
+          <ChevronsLeft className="w-3.5 h-3.5" strokeWidth={2} />
+        </PageNavBtn>
+        <PageNavBtn
+          disabled={page <= 1}
+          onClick={() => onChange(page - 1)}
+          ariaLabel="上一页"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" strokeWidth={2} />
+        </PageNavBtn>
+
+        <div className="mx-1 flex items-center gap-0.5">
+          {items.map((it, i) =>
+            it === "…" ? (
+              <span
+                key={`e${i}`}
+                className="inline-flex items-center justify-center w-7 h-7 text-text-faint text-[11px] select-none"
+                aria-hidden
+              >
+                …
+              </span>
+            ) : (
+              <PageBtn
+                key={it}
+                active={it === page}
+                onClick={() => onChange(it)}
+                ariaLabel={`第 ${it} 页`}
+              >
+                {it}
+              </PageBtn>
+            ),
+          )}
+        </div>
+
+        <PageNavBtn
+          disabled={page >= pageCount}
+          onClick={() => onChange(page + 1)}
+          ariaLabel="下一页"
+        >
+          <ChevronRight className="w-3.5 h-3.5" strokeWidth={2} />
+        </PageNavBtn>
+        <PageNavBtn
+          disabled={page >= pageCount}
+          onClick={() => onChange(pageCount)}
+          ariaLabel="最后一页"
+        >
+          <ChevronsRight className="w-3.5 h-3.5" strokeWidth={2} />
+        </PageNavBtn>
+      </div>
+    </nav>
+      </div>
+    </div>
+  );
+}
+
+function PageBtn({
+  children,
+  active,
+  onClick,
+  ariaLabel,
+}: {
+  children: React.ReactNode;
+  active?: boolean;
+  onClick: () => void;
+  ariaLabel?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={ariaLabel}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-md text-[12px] mono tabular-nums transition-colors",
+        active
+          ? "bg-accent text-bg-primary font-semibold shadow-sm"
+          : "text-text-secondary font-medium hover:bg-bg-hover hover:text-text-primary",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PageNavBtn({
+  children,
+  disabled,
+  onClick,
+  ariaLabel,
+}: {
+  children: React.ReactNode;
+  disabled?: boolean;
+  onClick: () => void;
+  ariaLabel?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={ariaLabel}
+      title={ariaLabel}
+      className={cn(
+        "inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors",
+        disabled
+          ? "text-text-faint/40 cursor-not-allowed"
+          : "text-text-muted hover:bg-bg-hover hover:text-text-primary",
+      )}
+    >
+      {children}
+    </button>
   );
 }

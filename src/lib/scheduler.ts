@@ -1,6 +1,8 @@
 import cron from "node-cron";
-import { collectAll } from "./collectors";
 import { prisma } from "./prisma";
+
+// 注意：collectors 在 callback 内 dynamic import，这样 dev HMR 改了 collector
+// 代码后，下一次 cron 触发拿到的是最新模块，而不是 server 启动时缓存的旧版本
 
 let isCollecting = false;
 let started = false;
@@ -29,6 +31,7 @@ export function startScheduler() {
       console.log("[Scheduler] 开始定时采集 @", new Date().toISOString());
 
       try {
+        const { collectAll } = await import("./collectors");
         const r = await collectAll();
         console.log(
           `[Scheduler] 采集完成: ${r.newCount} 条新内容, ${r.hitCount} 条命中, 耗时 ${Date.now() - startedAt}ms`
