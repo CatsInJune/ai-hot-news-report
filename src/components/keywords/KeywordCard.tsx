@@ -1,9 +1,10 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Trash2, Power, Bell, Mail, Hash, MessageCircle } from "lucide-react";
+import { Trash2, Power, Bell, Mail, Hash, MessageCircle, Pencil } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import KeywordDialog from "./KeywordDialog";
 
 interface Keyword {
   id: string;
@@ -32,6 +33,7 @@ export default function KeywordCard({
   onChanged: () => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
   const p =
     PRIORITY[keyword.priority as keyof typeof PRIORITY] ?? PRIORITY.medium;
 
@@ -50,7 +52,12 @@ export default function KeywordCard({
   };
 
   const handleDelete = async () => {
-    if (!confirm(`确认删除关键词「${keyword.name}」？`)) return;
+    const n = keyword._count.topics;
+    const msg =
+      n > 0
+        ? `确认删除关键词「${keyword.name}」？\n关联的 ${n} 条历史命中会一并删除。`
+        : `确认删除关键词「${keyword.name}」？`;
+    if (!confirm(msg)) return;
     setBusy(true);
     try {
       await fetch(`/api/keywords/${keyword.id}`, { method: "DELETE" });
@@ -106,6 +113,13 @@ export default function KeywordCard({
             <Power className="w-3.5 h-3.5" />
           </IconBtn>
           <IconBtn
+            onClick={() => setEditing(true)}
+            disabled={busy}
+            label="编辑"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </IconBtn>
+          <IconBtn
             onClick={handleDelete}
             disabled={busy}
             label="删除"
@@ -141,6 +155,22 @@ export default function KeywordCard({
           )}
         </div>
       </div>
+
+      <KeywordDialog
+        open={editing}
+        mode="edit"
+        initial={{
+          id: keyword.id,
+          name: keyword.name,
+          domain: keyword.domain,
+          priority: keyword.priority,
+          notifyBrowser: keyword.notifyBrowser,
+          notifyEmail: keyword.notifyEmail,
+          notifyWechat: keyword.notifyWechat,
+        }}
+        onClose={() => setEditing(false)}
+        onSaved={onChanged}
+      />
     </motion.div>
   );
 }

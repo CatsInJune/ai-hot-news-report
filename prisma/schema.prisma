@@ -72,7 +72,7 @@ model Topic {
 
   // 关联关键词
   keywordId String?
-  keyword   Keyword? @relation(fields: [keywordId], references: [id], onDelete: SetNull)
+  keyword   Keyword? @relation(fields: [keywordId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now())
 

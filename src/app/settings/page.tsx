@@ -10,7 +10,8 @@ interface EnvStatus {
   firecrawl: boolean;
   smtp: boolean;
   model: string;
-  notificationEmail: string;
+  notificationEmail: string;            // 已脱敏，如 r***r@example.com
+  notificationEmailConfigured: boolean; // 真正的"是否已配置"判断
   collectionCron: string;
   wechat: {
     configured: boolean;
@@ -180,7 +181,7 @@ export default function SettingsPage() {
         <Row
           label="收件邮箱"
           envVar="NOTIFICATION_EMAIL"
-          configured={!!env?.notificationEmail}
+          configured={env?.notificationEmailConfigured ?? false}
           value={env?.notificationEmail}
         />
         {env?.smtp && (
@@ -194,8 +195,8 @@ export default function SettingsPage() {
             </button>
             <button
               onClick={sendTestEmail}
-              disabled={sendingTest || !env.notificationEmail}
-              title={!env.notificationEmail ? "需先配置 NOTIFICATION_EMAIL" : "发送一封含 2 条样例命中的 digest 邮件"}
+              disabled={sendingTest || !env.notificationEmailConfigured}
+              title={!env.notificationEmailConfigured ? "需先配置 NOTIFICATION_EMAIL" : "发送一封含 2 条样例命中的 digest 邮件"}
               className="h-8 px-3 rounded-md border border-accent/30 text-accent-bright hover:bg-accent-soft text-[12.5px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {sendingTest ? "发送中…" : "发送测试邮件"}
