@@ -13,6 +13,7 @@ interface Keyword {
   priority: string;
   notifyBrowser: boolean;
   notifyEmail: boolean;
+  notifyWechat: boolean;
   createdAt: string;
   _count: { topics: number };
 }

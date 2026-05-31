@@ -25,6 +25,7 @@ export async function POST(req: NextRequest) {
       priority: ["high", "medium", "low"].includes(body.priority) ? body.priority : "medium",
       notifyBrowser: body.notifyBrowser !== false,
       notifyEmail: !!body.notifyEmail,
+      notifyWechat: !!body.notifyWechat,
       active: body.active !== false,
     },
   });

@@ -18,6 +18,7 @@ model Keyword {
   priority      String   @default("medium")
   notifyBrowser Boolean  @default(true)
   notifyEmail   Boolean  @default(false)
+  notifyWechat  Boolean  @default(false)
   // AI 扩展出的关键词变体 JSON 数组，例如 ["程序员鱼皮","鱼皮","yupi","@yupi996"]
   // 用于 Pre-match 的字面命中检测，首次采集时通过 AI 生成并缓存
   aliases       String?

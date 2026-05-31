@@ -26,6 +26,7 @@ export default function KeywordForm({ onCreated }: Props) {
     priority: "medium",
     notifyBrowser: true,
     notifyEmail: false,
+    notifyWechat: false,
   });
 
   const handleSubmit = async () => {
@@ -45,6 +46,7 @@ export default function KeywordForm({ onCreated }: Props) {
           priority: "medium",
           notifyBrowser: true,
           notifyEmail: false,
+          notifyWechat: false,
         });
         onCreated();
       }
@@ -152,7 +154,7 @@ export default function KeywordForm({ onCreated }: Props) {
                 </Field>
 
                 <Field label="通知方式">
-                  <div className="flex items-center gap-5 text-[13px]">
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px]">
                     <Toggle
                       checked={form.notifyBrowser}
                       onChange={(v) =>
@@ -164,6 +166,11 @@ export default function KeywordForm({ onCreated }: Props) {
                       checked={form.notifyEmail}
                       onChange={(v) => setForm({ ...form, notifyEmail: v })}
                       label="邮件"
+                    />
+                    <Toggle
+                      checked={form.notifyWechat}
+                      onChange={(v) => setForm({ ...form, notifyWechat: v })}
+                      label="微信"
                     />
                   </div>
                 </Field>

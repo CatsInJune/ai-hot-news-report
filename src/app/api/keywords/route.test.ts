@@ -77,6 +77,7 @@ describe("POST /api/keywords", () => {
         priority: "medium", // 默认
         notifyBrowser: true, // 默认开
         notifyEmail: false, // 默认关
+        notifyWechat: false, // 默认关
         active: true, // 默认 active
       }),
     });

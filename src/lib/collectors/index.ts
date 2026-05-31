@@ -380,8 +380,8 @@ export async function collectAll(): Promise<{
             });
 
             // 命中聚合通道：high/urgent 入队，5 分钟窗口合并发邮件 + 微信
-            // - emailOptIn 来自关键词的 notifyEmail 开关
-            // - 微信是否实际发送由全局 env WECHAT_WEBHOOK_URL 决定
+            // - emailOptIn / wechatOptIn 来自关键词的 notifyEmail / notifyWechat 开关
+            // - 是否真发还要全局 env 配了目标（邮箱地址 / 群机器人 webhook）
             const hasEmailTarget = !!process.env.NOTIFICATION_EMAIL;
             const hasWechatTarget = getWechatWebhookUrls().length > 0;
             const shouldNotify = a.importance === "high" || a.importance === "urgent";
@@ -399,7 +399,10 @@ export async function collectAll(): Promise<{
                   reason: created.reason,
                   publishedAt: created.publishedAt,
                 },
-                { emailOptIn: kw.notifyEmail },
+                {
+                  emailOptIn: kw.notifyEmail,
+                  wechatOptIn: kw.notifyWechat,
+                },
               );
             }
           }
