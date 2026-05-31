@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Trash2, Power, Bell, Mail, Hash } from "lucide-react";
+import { Trash2, Power, Bell, Mail, Hash, MessageCircle } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +13,7 @@ interface Keyword {
   priority: string;
   notifyBrowser: boolean;
   notifyEmail: boolean;
+  notifyWechat: boolean;
   createdAt: string;
   _count: { topics: number };
 }
@@ -131,6 +132,11 @@ export default function KeywordCard({
           {keyword.notifyEmail && (
             <span title="邮件推送" className="inline-flex p-1 rounded bg-bg-hover">
               <Mail className="w-3 h-3 text-info" />
+            </span>
+          )}
+          {keyword.notifyWechat && (
+            <span title="微信推送" className="inline-flex p-1 rounded bg-bg-hover">
+              <MessageCircle className="w-3 h-3 text-accent-bright" />
             </span>
           )}
         </div>

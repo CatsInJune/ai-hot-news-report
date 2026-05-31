@@ -26,6 +26,7 @@ interface QueuedItem {
   item: AlertItem;
   // 每个 channel 的 opt-in。来自关键词配置 / 全局 env，enqueue 时计算好
   emailOptIn: boolean;
+  wechatOptIn: boolean;
 }
 
 interface QueueState {
@@ -56,7 +57,7 @@ async function flush(): Promise<void> {
 
   // ---- 企业微信通道 ----
   const wechatUrls = getWechatWebhookUrls();
-  const wechatItems = drained.map((q) => q.item); // 暂无 per-keyword 微信开关
+  const wechatItems = drained.filter((q) => q.wechatOptIn).map((q) => q.item);
   const wechatResult =
     wechatUrls.length > 0 && wechatItems.length > 0
       ? await sendWechatDigest({ webhookUrls: wechatUrls, items: wechatItems })
@@ -97,11 +98,18 @@ async function flush(): Promise<void> {
 }
 
 /**
- * 把一条命中推进队列。emailOptIn 来自关键词的 notifyEmail 配置；
- * 微信是否实际发送由 env WECHAT_WEBHOOK_URL 决定，per-item 不设开关。
+ * 把一条命中推进队列。emailOptIn / wechatOptIn 来自关键词的 notifyEmail / notifyWechat
+ * 配置；最终是否真发还要看全局 env（NOTIFICATION_EMAIL / WECHAT_WEBHOOK_URL）是否配了目标。
  */
-export function enqueueAlert(item: AlertItem, opts: { emailOptIn: boolean }): void {
-  state.items.push({ item, emailOptIn: opts.emailOptIn });
+export function enqueueAlert(
+  item: AlertItem,
+  opts: { emailOptIn: boolean; wechatOptIn: boolean },
+): void {
+  state.items.push({
+    item,
+    emailOptIn: opts.emailOptIn,
+    wechatOptIn: opts.wechatOptIn,
+  });
 
   // 达上限立刻 flush（防单封超长）
   if (state.items.length >= DIGEST_MAX_ITEMS) {
@@ -131,11 +139,13 @@ export function getQueueStats(): {
   count: number;
   ageMs: number;
   emailEligible: number;
+  wechatEligible: number;
 } {
   const now = Date.now();
   return {
     count: state.items.length,
     ageMs: state.windowStart ? now - state.windowStart : 0,
     emailEligible: state.items.filter((q) => q.emailOptIn).length,
+    wechatEligible: state.items.filter((q) => q.wechatOptIn).length,
   };
 }

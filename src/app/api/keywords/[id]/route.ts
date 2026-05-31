@@ -14,6 +14,7 @@ export async function PATCH(
   if (["high", "medium", "low"].includes(body.priority)) data.priority = body.priority;
   if (typeof body.notifyBrowser === "boolean") data.notifyBrowser = body.notifyBrowser;
   if (typeof body.notifyEmail === "boolean") data.notifyEmail = body.notifyEmail;
+  if (typeof body.notifyWechat === "boolean") data.notifyWechat = body.notifyWechat;
   if (typeof body.active === "boolean") data.active = body.active;
 
   try {
