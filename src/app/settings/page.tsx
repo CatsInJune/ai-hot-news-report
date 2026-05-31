@@ -1,9 +1,8 @@
 "use client";
 
-import { Check, X, Info, Trash2, AlertTriangle } from "lucide-react";
+import { Check, X, Info } from "lucide-react";
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
 
 interface EnvStatus {
   openrouter: boolean;
@@ -20,44 +19,16 @@ interface EnvStatus {
   };
 }
 
-interface Counts {
-  topics: number;
-  notifications: number;
-  keywords: number;
-}
-
-interface DigestStats {
-  count: number;
-  ageMs: number;
-  emailEligible: number;
-}
-
-type ClearScope = "topics" | "notifications" | "keywords";
-
 export default function SettingsPage() {
   const [env, setEnv] = useState<EnvStatus | null>(null);
-  const [counts, setCounts] = useState<Counts | null>(null);
-  const [digestStats, setDigestStats] = useState<DigestStats | null>(null);
   const [smtpResult, setSmtpResult] = useState<string>("");
   const [emailResult, setEmailResult] = useState<string>("");
-  const [flushResult, setFlushResult] = useState<string>("");
   const [wechatResult, setWechatResult] = useState<string>("");
   const [pingResult, setPingResult] = useState<string>("");
   const [testing, setTesting] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
-  const [flushing, setFlushing] = useState(false);
   const [sendingWechat, setSendingWechat] = useState(false);
   const [pinging, setPinging] = useState(false);
-
-  const refresh = useCallback(async () => {
-    const res = await fetch("/api/settings");
-    if (res.ok) {
-      const d = await res.json();
-      setEnv(d.env);
-      setCounts(d.counts ?? null);
-      setDigestStats(d.digestQueue ?? null);
-    }
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -67,8 +38,6 @@ export default function SettingsPage() {
       const d = await res.json();
       if (cancelled) return;
       setEnv(d.env);
-      setCounts(d.counts ?? null);
-      setDigestStats(d.digestQueue ?? null);
     })();
     return () => {
       cancelled = true;
@@ -107,30 +76,6 @@ export default function SettingsPage() {
       setEmailResult(`失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setSendingTest(false);
-    }
-  };
-
-  const flushDigests = async () => {
-    setFlushing(true);
-    setFlushResult("");
-    try {
-      const res = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "flush-digests" }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        const total = (data.flushed as DigestStats | undefined)?.count ?? 0;
-        setFlushResult(total > 0 ? `已立即发送 ${total} 条` : "队列为空");
-        await refresh();
-      } else {
-        setFlushResult(`失败：${data.error ?? "unknown"}`);
-      }
-    } catch (err) {
-      setFlushResult(`失败：${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setFlushing(false);
     }
   };
 
@@ -338,54 +283,10 @@ export default function SettingsPage() {
         )}
       </Section>
 
-      <Section
-        title="通知批量队列"
-        subtitle="命中按 5 分钟窗口聚合，同步发到邮件 + 微信，避免轰炸"
-      >
-        <div className="px-5 py-3 flex items-center justify-between gap-4 text-[12.5px]">
-          <div className="min-w-0 flex-1">
-            {!digestStats || digestStats.count === 0 ? (
-              <div className="text-text-muted">
-                当前队列为空——下次命中 high/urgent 关键词时会自动入队
-              </div>
-            ) : (
-              <>
-                <div className="font-medium text-text-primary">
-                  累积 {digestStats.count} 条
-                </div>
-                <div className="mono text-text-muted text-[11.5px] mt-0.5">
-                  窗口已开 {Math.floor(digestStats.ageMs / 1000)}s · 邮件 eligible {digestStats.emailEligible}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-        <div className="px-5 py-3 bg-bg-surface/40 border-t border-border-default flex items-center flex-wrap gap-3">
-          <button
-            onClick={flushDigests}
-            disabled={flushing}
-            className="h-8 px-3 rounded-md border border-border-strong hover:border-accent/40 hover:text-accent-bright text-[12.5px] font-medium text-text-secondary transition-colors disabled:opacity-50"
-          >
-            {flushing ? "发送中…" : "立即发送队列"}
-          </button>
-          {flushResult && (
-            <span
-              className={`text-[12.5px] font-medium ${
-                flushResult.startsWith("失败") ? "text-danger" : "text-accent-bright"
-              }`}
-            >
-              {flushResult}
-            </span>
-          )}
-        </div>
-      </Section>
-
       <Section title="运行时配置">
         <InfoRow label="AI 模型" value={env?.model ?? "—"} />
         <InfoRow label="采集频率" value={env?.collectionCron ?? "—"} />
       </Section>
-
-      <DangerZone counts={counts} onCleared={refresh} />
 
       <Section title=".env 示例" subtitle="复制到项目根目录的 .env 文件中">
         <pre className="text-[12px] mono text-text-secondary bg-bg-elevated/60 p-4 leading-relaxed overflow-x-auto">{`OPENROUTER_API_KEY="sk-or-v1-xxx"
@@ -512,215 +413,3 @@ function Pill({ ok }: { ok: boolean }) {
   );
 }
 
-function DangerZone({
-  counts,
-  onCleared,
-}: {
-  counts: Counts | null;
-  onCleared: () => void;
-}) {
-  const [scope, setScope] = useState<Set<ClearScope>>(
-    new Set(["topics", "notifications"]),
-  );
-  const [confirming, setConfirming] = useState(false);
-  const [clearing, setClearing] = useState(false);
-  const [result, setResult] = useState<string>("");
-
-  const toggle = (k: ClearScope) => {
-    setScope((prev) => {
-      const next = new Set(prev);
-      if (next.has(k)) next.delete(k);
-      else next.add(k);
-      return next;
-    });
-    setResult("");
-  };
-
-  const totalToDelete = (() => {
-    if (!counts) return 0;
-    let n = 0;
-    if (scope.has("topics")) n += counts.topics;
-    if (scope.has("notifications")) n += counts.notifications;
-    if (scope.has("keywords")) n += counts.keywords;
-    return n;
-  })();
-
-  const handleClear = async () => {
-    if (scope.size === 0) return;
-    setClearing(true);
-    setResult("");
-    try {
-      const res = await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "clear-data",
-          scope: Array.from(scope),
-        }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        const parts: string[] = [];
-        if (typeof data.cleared?.topics === "number")
-          parts.push(`${data.cleared.topics} 条话题`);
-        if (typeof data.cleared?.notifications === "number")
-          parts.push(`${data.cleared.notifications} 条通知`);
-        if (typeof data.cleared?.keywords === "number")
-          parts.push(`${data.cleared.keywords} 个关键词`);
-        setResult(`已清空：${parts.join(" / ") || "无"}`);
-        onCleared();
-        // 通知其他常驻组件（TopBar / Feed 等）立即拉取最新数据
-        window.dispatchEvent(new CustomEvent("app:data-changed"));
-      } else {
-        setResult(`失败：${data.error ?? "unknown"}`);
-      }
-    } catch (err) {
-      setResult(`失败：${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setClearing(false);
-      setConfirming(false);
-    }
-  };
-
-  return (
-    <motion.section
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="mb-6 card overflow-hidden border-danger/30"
-      style={{ borderColor: "color-mix(in oklab, var(--danger) 25%, transparent)" }}
-    >
-      <div className="px-5 py-3 border-b border-border-default bg-danger/5">
-        <h2 className="text-[14px] font-semibold text-danger flex items-center gap-1.5">
-          <AlertTriangle className="w-3.5 h-3.5" />
-          危险操作
-        </h2>
-        <p className="mt-0.5 text-[12px] text-text-muted">
-          清空后不可恢复。建议在测试或重置阶段使用。
-        </p>
-      </div>
-
-      <div className="divide-y divide-border-default">
-        <ScopeRow
-          label="话题数据"
-          desc="所有采集到的 Topic 记录"
-          count={counts?.topics ?? 0}
-          checked={scope.has("topics")}
-          onToggle={() => toggle("topics")}
-        />
-        <ScopeRow
-          label="通知记录"
-          desc="所有 Notification 记录（不影响关键词配置）"
-          count={counts?.notifications ?? 0}
-          checked={scope.has("notifications")}
-          onToggle={() => toggle("notifications")}
-        />
-        <ScopeRow
-          label="关键词配置"
-          desc="所有 Keyword 记录（删除后采集器将无关键词可监控）"
-          count={counts?.keywords ?? 0}
-          checked={scope.has("keywords")}
-          onToggle={() => toggle("keywords")}
-          danger
-        />
-      </div>
-
-      <div className="px-5 py-3 bg-bg-surface/40 border-t border-border-default flex items-center gap-3 flex-wrap">
-        {!confirming ? (
-          <button
-            type="button"
-            onClick={() => setConfirming(true)}
-            disabled={scope.size === 0 || clearing}
-            className={cn(
-              "flex items-center gap-1.5 h-8 px-3 rounded-md text-[12.5px] font-medium transition-colors",
-              "border border-danger/30 text-danger hover:bg-danger/10 disabled:opacity-50 disabled:cursor-not-allowed",
-            )}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            清空所选
-          </button>
-        ) : (
-          <>
-            <span className="text-[12.5px] text-text-secondary">
-              将删除约 <strong className="text-danger mono">{totalToDelete}</strong>{" "}
-              条记录，确定？
-            </span>
-            <button
-              type="button"
-              onClick={handleClear}
-              disabled={clearing}
-              className="h-8 px-3 rounded-md text-[12.5px] font-medium bg-danger text-bg-primary hover:opacity-90 transition-opacity disabled:opacity-50"
-            >
-              {clearing ? "清空中…" : "确认清空"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirming(false)}
-              disabled={clearing}
-              className="h-8 px-3 rounded-md text-[12.5px] font-medium border border-border-strong text-text-secondary hover:text-text-primary transition-colors disabled:opacity-50"
-            >
-              取消
-            </button>
-          </>
-        )}
-        {result && (
-          <span
-            className={cn(
-              "text-[12.5px] font-medium",
-              result.startsWith("失败")
-                ? "text-danger"
-                : "text-accent-bright",
-            )}
-          >
-            {result}
-          </span>
-        )}
-      </div>
-    </motion.section>
-  );
-}
-
-function ScopeRow({
-  label,
-  desc,
-  count,
-  checked,
-  onToggle,
-  danger,
-}: {
-  label: string;
-  desc: string;
-  count: number;
-  checked: boolean;
-  onToggle: () => void;
-  danger?: boolean;
-}) {
-  return (
-    <label className="px-5 py-3 flex items-center justify-between gap-4 hover:bg-bg-hover/30 transition-colors">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <span className="text-[13.5px] font-medium text-text-primary">
-            {label}
-          </span>
-          {danger && (
-            <span className="px-1 h-4 rounded text-[10px] font-medium bg-danger/12 text-danger border border-danger/25 flex items-center">
-              谨慎
-            </span>
-          )}
-        </div>
-        <p className="text-[12px] text-text-secondary mt-0.5">{desc}</p>
-      </div>
-      <div className="flex items-center gap-3 shrink-0">
-        <span className="text-[12.5px] mono tabular-nums text-text-muted">
-          {count}
-        </span>
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={onToggle}
-          className="w-4 h-4 accent-danger"
-        />
-      </div>
-    </label>
-  );
-}
