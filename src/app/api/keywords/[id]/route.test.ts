@@ -42,10 +42,12 @@ describe("PATCH /api/keywords/[id]", () => {
     });
   });
 
-  it("trim name", async () => {
+  it("name 字段被静默忽略（name 不可编辑，需删除后重建）", async () => {
     keywordMock.update.mockResolvedValue({});
-    await PATCH(patchReq({ name: "  X  " }), ctx("abc"));
-    expect(keywordMock.update.mock.calls[0][0].data.name).toBe("X");
+    await PATCH(patchReq({ name: "  X  ", domain: "AI编程" }), ctx("abc"));
+    const data = keywordMock.update.mock.calls[0][0].data;
+    expect(data.name).toBeUndefined();
+    expect(data.domain).toBe("AI编程");
   });
 
   it("非法 priority 不写入（不污染数据）", async () => {
