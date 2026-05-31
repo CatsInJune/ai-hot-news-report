@@ -47,6 +47,10 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ ok: false, error: "未抓到正文" }, { status: 502 });
   }
 
-  await prisma.topic.update({ where: { id }, data: { rawContent: content } });
+  // 原文重抓 → 旧译文跟新原文对不上，必须清掉
+  await prisma.topic.update({
+    where: { id },
+    data: { rawContent: content, translations: null },
+  });
   return NextResponse.json({ ok: true, rawContent: content, cached: false });
 }

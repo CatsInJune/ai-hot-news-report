@@ -37,6 +37,9 @@ model Topic {
   summary     String?
   // 采集到的原始描述/正文，用于"展开原文"。可能为空（HN 等）。
   rawContent  String?
+  // 译文缓存，JSON map：{ "zh-CN": "...", "en": "..." }
+  // 按需翻译时 LLM 写入，相同目标语言不重复调用；rawContent 重抓时清空
+  translations String?
   url         String   @unique
   source      String
   sourceIcon  String?

@@ -1,5 +1,10 @@
 import type { RawTopic } from "@/types";
 import { twitterLimiter } from "@/lib/rate-limiter";
+import {
+  buildTweetRawContent,
+  cleanTweetText,
+  type TwitterMedia,
+} from "./twitter-media";
 
 const TWITTER_API_BASE = "https://api.twitterapi.io";
 
@@ -20,6 +25,7 @@ interface Tweet {
   viewCount?: number;
   createdAt?: string;
   author?: TweetAuthor;
+  extendedEntities?: { media?: TwitterMedia[] };
 }
 
 /**
@@ -52,23 +58,27 @@ export async function collectTwitterTimeline(handle: string): Promise<RawTopic[]
 
     return tweets
       .slice(0, 20)
-      .map((t) => ({
-        title: t.text.slice(0, 120),
-        summary: t.text,
-        // 推文全文是真正的原文
-        rawContent: t.text,
-        url: t.url ?? `https://twitter.com/${handle}/status/${t.id}`,
-        source: "twitter" as const,
-        author: t.author?.name ?? handle,
-        authorVerified: t.author?.isBlueVerified,
-        authorFollowers: t.author?.followers,
-        publishedAt: t.createdAt ? new Date(t.createdAt) : new Date(),
-        likes: t.likeCount ?? 0,
-        reposts: t.retweetCount ?? 0,
-        comments: t.replyCount ?? 0,
-        views: t.viewCount ?? 0,
-        subscribed: true,
-      }))
+      .map((t) => {
+        // 剥掉指向媒体的 t.co 短链，title/summary/rawContent 都用清洗后的文本
+        const cleanText = cleanTweetText(t);
+        return {
+          title: cleanText.slice(0, 120),
+          summary: cleanText,
+          // 推文全文 + 媒体一起作为原文
+          rawContent: buildTweetRawContent(t),
+          url: t.url ?? `https://twitter.com/${handle}/status/${t.id}`,
+          source: "twitter" as const,
+          author: t.author?.name ?? handle,
+          authorVerified: t.author?.isBlueVerified,
+          authorFollowers: t.author?.followers,
+          publishedAt: t.createdAt ? new Date(t.createdAt) : new Date(),
+          likes: t.likeCount ?? 0,
+          reposts: t.retweetCount ?? 0,
+          comments: t.replyCount ?? 0,
+          views: t.viewCount ?? 0,
+          subscribed: true,
+        };
+      })
       .filter((t) => t.title);
   } catch (err) {
     console.error("[TwitterTimeline] 采集失败:", err instanceof Error ? err.message : err);

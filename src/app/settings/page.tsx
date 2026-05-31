@@ -13,6 +13,11 @@ interface EnvStatus {
   model: string;
   notificationEmail: string;
   collectionCron: string;
+  wechat: {
+    configured: boolean;
+    count: number;
+    masked: string[];
+  };
 }
 
 interface Counts {
@@ -21,13 +26,28 @@ interface Counts {
   keywords: number;
 }
 
+interface DigestStats {
+  count: number;
+  ageMs: number;
+  emailEligible: number;
+}
+
 type ClearScope = "topics" | "notifications" | "keywords";
 
 export default function SettingsPage() {
   const [env, setEnv] = useState<EnvStatus | null>(null);
   const [counts, setCounts] = useState<Counts | null>(null);
+  const [digestStats, setDigestStats] = useState<DigestStats | null>(null);
   const [smtpResult, setSmtpResult] = useState<string>("");
+  const [emailResult, setEmailResult] = useState<string>("");
+  const [flushResult, setFlushResult] = useState<string>("");
+  const [wechatResult, setWechatResult] = useState<string>("");
+  const [pingResult, setPingResult] = useState<string>("");
   const [testing, setTesting] = useState(false);
+  const [sendingTest, setSendingTest] = useState(false);
+  const [flushing, setFlushing] = useState(false);
+  const [sendingWechat, setSendingWechat] = useState(false);
+  const [pinging, setPinging] = useState(false);
 
   const refresh = useCallback(async () => {
     const res = await fetch("/api/settings");
@@ -35,6 +55,7 @@ export default function SettingsPage() {
       const d = await res.json();
       setEnv(d.env);
       setCounts(d.counts ?? null);
+      setDigestStats(d.digestQueue ?? null);
     }
   }, []);
 
@@ -47,6 +68,7 @@ export default function SettingsPage() {
       if (cancelled) return;
       setEnv(d.env);
       setCounts(d.counts ?? null);
+      setDigestStats(d.digestQueue ?? null);
     })();
     return () => {
       cancelled = true;
@@ -66,6 +88,97 @@ export default function SettingsPage() {
       setSmtpResult(data.ok ? "ok" : data.error ?? "failed");
     } finally {
       setTesting(false);
+    }
+  };
+
+  const sendTestEmail = async () => {
+    setSendingTest(true);
+    setEmailResult("");
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test-email" }),
+      });
+      const data = await res.json();
+      if (data.ok) setEmailResult(`已发送到 ${data.to}`);
+      else setEmailResult(`失败：${data.error ?? "unknown"}`);
+    } catch (err) {
+      setEmailResult(`失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSendingTest(false);
+    }
+  };
+
+  const flushDigests = async () => {
+    setFlushing(true);
+    setFlushResult("");
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "flush-digests" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        const total = (data.flushed as DigestStats | undefined)?.count ?? 0;
+        setFlushResult(total > 0 ? `已立即发送 ${total} 条` : "队列为空");
+        await refresh();
+      } else {
+        setFlushResult(`失败：${data.error ?? "unknown"}`);
+      }
+    } catch (err) {
+      setFlushResult(`失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setFlushing(false);
+    }
+  };
+
+  const sendTestWechat = async () => {
+    setSendingWechat(true);
+    setWechatResult("");
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test-wechat" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setWechatResult(`已发送到 ${data.sent}/${data.total} 个 webhook`);
+      } else {
+        const errMsg = data.errors?.length ? data.errors.join(" | ") : data.error ?? "unknown";
+        setWechatResult(`失败：${errMsg}`);
+      }
+    } catch (err) {
+      setWechatResult(`失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setSendingWechat(false);
+    }
+  };
+
+  const pingWechat = async () => {
+    setPinging(true);
+    setPingResult("");
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "ping-wechat" }),
+      });
+      const data = await res.json();
+      if (data.ok) setPingResult("全部连通");
+      else {
+        const fail = (data.results as Array<{ ok: boolean; error?: string }> | undefined)
+          ?.filter((r) => !r.ok)
+          .map((r) => r.error ?? "unknown")
+          .join(" | ");
+        setPingResult(`失败：${fail || data.error || "unknown"}`);
+      }
+    } catch (err) {
+      setPingResult(`失败：${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setPinging(false);
     }
   };
 
@@ -126,13 +239,21 @@ export default function SettingsPage() {
           value={env?.notificationEmail}
         />
         {env?.smtp && (
-          <div className="px-5 py-3 bg-bg-surface/40 border-t border-border-default flex items-center gap-3">
+          <div className="px-5 py-3 bg-bg-surface/40 border-t border-border-default flex items-center flex-wrap gap-3">
             <button
               onClick={testSMTP}
               disabled={testing}
               className="h-8 px-3 rounded-md border border-border-strong hover:border-accent/40 hover:text-accent-bright text-[12.5px] font-medium text-text-secondary transition-colors disabled:opacity-50"
             >
               {testing ? "测试中…" : "测试 SMTP 连接"}
+            </button>
+            <button
+              onClick={sendTestEmail}
+              disabled={sendingTest || !env.notificationEmail}
+              title={!env.notificationEmail ? "需先配置 NOTIFICATION_EMAIL" : "发送一封含 2 条样例命中的 digest 邮件"}
+              className="h-8 px-3 rounded-md border border-accent/30 text-accent-bright hover:bg-accent-soft text-[12.5px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {sendingTest ? "发送中…" : "发送测试邮件"}
             </button>
             {smtpResult && (
               <span
@@ -143,8 +264,120 @@ export default function SettingsPage() {
                 {smtpResult === "ok" ? "连接正常" : `失败：${smtpResult}`}
               </span>
             )}
+            {emailResult && (
+              <span
+                className={`text-[12.5px] font-medium ${
+                  emailResult.startsWith("失败") ? "text-danger" : "text-accent-bright"
+                }`}
+              >
+                {emailResult}
+              </span>
+            )}
           </div>
         )}
+      </Section>
+
+      <Section title="微信推送" subtitle="企业微信群机器人 webhook，关键词命中时合并发卡片">
+        <Row
+          label="企业微信 Webhook"
+          envVar="WECHAT_WEBHOOK_URL"
+          configured={env?.wechat.configured ?? false}
+          hint={
+            env?.wechat.configured
+              ? `已配置 ${env.wechat.count} 个 webhook · 多个用逗号分隔`
+              : "群设置 → 群机器人 → 添加 → 复制 webhook URL 填入 .env"
+          }
+          value={env?.wechat.masked?.[0]}
+        />
+        {env?.wechat.configured && env.wechat.count > 1 && (
+          <div className="px-5 py-2 text-[11.5px] mono text-text-muted">
+            其他 webhook：
+            <ul className="mt-1 space-y-0.5">
+              {env.wechat.masked.slice(1).map((m) => (
+                <li key={m} className="truncate text-accent-bright">{m}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {env?.wechat.configured && (
+          <div className="px-5 py-3 bg-bg-surface/40 border-t border-border-default flex items-center flex-wrap gap-3">
+            <button
+              onClick={pingWechat}
+              disabled={pinging}
+              className="h-8 px-3 rounded-md border border-border-strong hover:border-accent/40 hover:text-accent-bright text-[12.5px] font-medium text-text-secondary transition-colors disabled:opacity-50"
+            >
+              {pinging ? "测试中…" : "Ping Webhook"}
+            </button>
+            <button
+              onClick={sendTestWechat}
+              disabled={sendingWechat}
+              title="发送一条含 2 条样例命中的 digest 到企业微信群"
+              className="h-8 px-3 rounded-md border border-accent/30 text-accent-bright hover:bg-accent-soft text-[12.5px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {sendingWechat ? "发送中…" : "发送测试消息"}
+            </button>
+            {pingResult && (
+              <span
+                className={`text-[12.5px] font-medium ${
+                  pingResult.startsWith("失败") ? "text-danger" : "text-accent-bright"
+                }`}
+              >
+                {pingResult}
+              </span>
+            )}
+            {wechatResult && (
+              <span
+                className={`text-[12.5px] font-medium ${
+                  wechatResult.startsWith("失败") ? "text-danger" : "text-accent-bright"
+                }`}
+              >
+                {wechatResult}
+              </span>
+            )}
+          </div>
+        )}
+      </Section>
+
+      <Section
+        title="通知批量队列"
+        subtitle="命中按 5 分钟窗口聚合，同步发到邮件 + 微信，避免轰炸"
+      >
+        <div className="px-5 py-3 flex items-center justify-between gap-4 text-[12.5px]">
+          <div className="min-w-0 flex-1">
+            {!digestStats || digestStats.count === 0 ? (
+              <div className="text-text-muted">
+                当前队列为空——下次命中 high/urgent 关键词时会自动入队
+              </div>
+            ) : (
+              <>
+                <div className="font-medium text-text-primary">
+                  累积 {digestStats.count} 条
+                </div>
+                <div className="mono text-text-muted text-[11.5px] mt-0.5">
+                  窗口已开 {Math.floor(digestStats.ageMs / 1000)}s · 邮件 eligible {digestStats.emailEligible}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="px-5 py-3 bg-bg-surface/40 border-t border-border-default flex items-center flex-wrap gap-3">
+          <button
+            onClick={flushDigests}
+            disabled={flushing}
+            className="h-8 px-3 rounded-md border border-border-strong hover:border-accent/40 hover:text-accent-bright text-[12.5px] font-medium text-text-secondary transition-colors disabled:opacity-50"
+          >
+            {flushing ? "发送中…" : "立即发送队列"}
+          </button>
+          {flushResult && (
+            <span
+              className={`text-[12.5px] font-medium ${
+                flushResult.startsWith("失败") ? "text-danger" : "text-accent-bright"
+              }`}
+            >
+              {flushResult}
+            </span>
+          )}
+        </div>
       </Section>
 
       <Section title="运行时配置">
@@ -166,6 +399,15 @@ SMTP_PORT="587"
 SMTP_USER="your@gmail.com"
 SMTP_PASS="your-app-password"
 NOTIFICATION_EMAIL="receiver@example.com"
+
+# 企业微信群机器人 webhook，多个用逗号分隔
+WECHAT_WEBHOOK_URL="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
+# 单封 digest 最多列几条（多余只显示数量）
+WECHAT_DIGEST_MAX_LINES="5"
+
+# 通知防轰炸：N 毫秒窗口聚合一封 digest；条数达 MAX 立即发
+EMAIL_DIGEST_WINDOW_MS="300000"
+EMAIL_DIGEST_MAX_ITEMS="20"
 
 COLLECTION_CRON="*/30 * * * *"`}</pre>
       </Section>

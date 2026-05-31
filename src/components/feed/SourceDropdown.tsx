@@ -12,26 +12,27 @@ interface Props {
   onChange: (source: string) => void;
 }
 
+// 顺序按类别分组：海外社交 → 搜索 → 国内社交 → AI 专栏
 const SOURCES: Array<SourceType | "all"> = [
   "all",
   "twitter",
+  "hackernews",
+  "reddit",
+  "arxiv",
   "bing",
   "google",
-  "hackernews",
+  "baidu",
   "sogou",
-  "bilibili",
   "weibo",
+  "bilibili",
+  "ai_blog",
+  "ai_news_zh",
 ];
 
+// 只覆盖需要简写的（HN）；其它直接走 SOURCE_LABELS
 const LABEL_OVERRIDE: Record<string, string> = {
   all: "All",
-  twitter: "Twitter",
-  bing: "Bing",
-  google: "Google",
   hackernews: "HN",
-  sogou: "搜狗",
-  bilibili: "B站",
-  weibo: "微博",
 };
 
 function labelOf(src: string) {

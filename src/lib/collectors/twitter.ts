@@ -1,5 +1,10 @@
 import type { RawTopic } from "@/types";
 import { twitterLimiter } from "@/lib/rate-limiter";
+import {
+  buildTweetRawContent,
+  cleanTweetText,
+  type TwitterMedia,
+} from "./twitter-media";
 
 const TWITTER_API_BASE = "https://api.twitterapi.io";
 
@@ -20,6 +25,7 @@ interface Tweet {
   viewCount?: number;
   createdAt?: string;
   author?: TweetAuthor;
+  extendedEntities?: { media?: TwitterMedia[] };
 }
 
 async function fetchTweets(
@@ -97,11 +103,14 @@ export async function collectTwitter(keyword: string): Promise<RawTopic[]> {
       .filter(isQualityTweet)
       .sort((a, b) => engagement(b) - engagement(a))
       .slice(0, 20)
-      .map((t) => ({
-        title: t.text.slice(0, 120),
-        summary: t.text,
-        // 推文全文是真正的原文，可放心展开
-        rawContent: t.text,
+      .map((t) => {
+        // 文本里指向媒体的 t.co 短链先剔掉，title/summary/rawContent 都用清洗后的文本
+        const cleanText = cleanTweetText(t);
+        return {
+        title: cleanText.slice(0, 120),
+        summary: cleanText,
+        // 推文全文 + 媒体（图片/视频静帧+链接）一起作为原文
+        rawContent: buildTweetRawContent(t),
         url: t.url ?? `https://twitter.com/${t.author?.userName ?? "i"}/status/${t.id}`,
         source: "twitter" as const,
         author: t.author?.name ?? t.author?.userName,
@@ -112,7 +121,8 @@ export async function collectTwitter(keyword: string): Promise<RawTopic[]> {
         reposts: t.retweetCount ?? 0,
         comments: t.replyCount ?? 0,
         views: t.viewCount ?? 0,
-      }));
+      };
+      });
   } catch (err) {
     console.error("[Twitter] 采集失败:", err);
     return [];

@@ -15,6 +15,7 @@ interface Topic {
   title: string;
   summary: string | null;
   rawContent?: string | null;
+  translations?: string | null;
   url: string;
   source: string;
   author: string | null;

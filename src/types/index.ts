@@ -7,16 +7,26 @@ export type SourceType =
   | "hackernews"
   | "sogou"
   | "bilibili"
-  | "weibo";
+  | "weibo"
+  | "reddit"
+  | "arxiv"
+  | "ai_blog"
+  | "ai_news_zh"
+  | "baidu";
 
 export const SOURCE_LABELS: Record<SourceType, string> = {
   twitter: "Twitter",
   bing: "Bing",
   google: "Google",
   hackernews: "Hacker News",
-  sogou: "搜狗微信",
+  sogou: "搜狗",
   bilibili: "B站",
   weibo: "微博",
+  reddit: "Reddit",
+  arxiv: "arXiv",
+  ai_blog: "AI 官博",
+  ai_news_zh: "AI 中文媒体",
+  baidu: "百度新闻",
 };
 
 export const SOURCE_COLORS: Record<SourceType, string> = {
@@ -27,6 +37,11 @@ export const SOURCE_COLORS: Record<SourceType, string> = {
   sogou: "#FF6900",
   bilibili: "#00A1D6",
   weibo: "#E6162D",
+  reddit: "#FF4500",
+  arxiv: "#B31B1B",
+  ai_blog: "#10A37F",
+  ai_news_zh: "#7C3AED",
+  baidu: "#2932E1",
 };
 
 // 采集器统一返回数据格式

@@ -4,16 +4,23 @@ import { expandKeyword, preMatchKeyword } from "@/lib/keyword-expander";
 import { detectAccounts } from "@/lib/account-detector";
 import { extractContentBatch, SCRAPABLE_SOURCES } from "@/lib/extract-content";
 import { sseManager } from "@/lib/sse-manager";
-import { sendKeywordAlert } from "@/lib/mailer";
+import { enqueueAlert } from "@/lib/notification-queue";
+import { getWechatWebhookUrls } from "@/lib/wechat";
 import type { RawTopic, SourceType, KeywordAccount } from "@/types";
 import { collectTwitter } from "./twitter";
 import { collectBing } from "./bing";
 import { collectGoogle } from "./google";
 import { collectHackerNews } from "./hackernews";
 import { collectSogou } from "./sogou";
+import { collectWeibo } from "./weibo";
 import { collectBilibili } from "./bilibili";
 import { collectTwitterTimeline } from "./twitter-timeline";
 import { collectBilibiliUser, findBilibiliUid } from "./bilibili-user";
+import { collectReddit } from "./reddit";
+import { collectArxiv } from "./arxiv";
+import { collectAiBlog } from "./ai-blog";
+import { collectAiNewsZh } from "./ai-news-zh";
+import { collectBaidu } from "./baidu";
 
 // 过滤阈值（写死，调阈值改这里）
 const MIN_RELEV_SCORE = 50;        // 一级阈值：低于直接丢
@@ -27,6 +34,11 @@ const SOURCE_QUOTA: Record<string, number> = {
   weibo: 10,
   bilibili: 8,
   hackernews: 8,
+  reddit: 10,
+  arxiv: 6,
+  ai_blog: 6,
+  ai_news_zh: 6,
+  baidu: 8,
   bing: 5,
   google: 5,
   sogou: 3,
@@ -62,7 +74,13 @@ export async function collectForKeyword(
     { name: "google", fn: () => collectGoogle(keyword) },
     { name: "hackernews", fn: () => collectHackerNews(keyword) },
     { name: "sogou", fn: () => collectSogou(keyword) },
+    { name: "weibo", fn: () => collectWeibo(keyword) },
     { name: "bilibili", fn: () => collectBilibili(keyword) },
+    { name: "reddit", fn: () => collectReddit(keyword) },
+    { name: "arxiv", fn: () => collectArxiv(keyword) },
+    { name: "ai_blog", fn: () => collectAiBlog(keyword) },
+    { name: "ai_news_zh", fn: () => collectAiNewsZh(keyword) },
+    { name: "baidu", fn: () => collectBaidu(keyword) },
   ];
 
   // 账号订阅源：每个识别到的账号一个 collector
@@ -361,29 +379,28 @@ export async function collectAll(): Promise<{
               },
             });
 
-            // 邮件：仅对 high/urgent 触发，避免轰炸
-            const notifyEmail = process.env.NOTIFICATION_EMAIL;
-            if (kw.notifyEmail && notifyEmail && (a.importance === "high" || a.importance === "urgent")) {
-              void sendKeywordAlert({
-                to: notifyEmail,
-                keyword: kw.name,
-                title: created.title,
-                summary: created.summary ?? "",
-                url: created.url,
-                source: created.source,
-                hotScore: created.hotScore,
-              }).then((sent) => {
-                if (sent) {
-                  return prisma.notification.create({
-                    data: {
-                      type: "email",
-                      title: `邮件已发送: ${kw.name}`,
-                      content: created.title,
-                      topicUrl: created.url,
-                    },
-                  });
-                }
-              });
+            // 命中聚合通道：high/urgent 入队，5 分钟窗口合并发邮件 + 微信
+            // - emailOptIn 来自关键词的 notifyEmail 开关
+            // - 微信是否实际发送由全局 env WECHAT_WEBHOOK_URL 决定
+            const hasEmailTarget = !!process.env.NOTIFICATION_EMAIL;
+            const hasWechatTarget = getWechatWebhookUrls().length > 0;
+            const shouldNotify = a.importance === "high" || a.importance === "urgent";
+            if (shouldNotify && (hasEmailTarget || hasWechatTarget)) {
+              enqueueAlert(
+                {
+                  keyword: kw.name,
+                  title: created.title,
+                  summary: created.summary ?? "",
+                  url: created.url,
+                  source: created.source,
+                  hotScore: created.hotScore,
+                  relevScore: created.relevScore,
+                  importance: created.importance,
+                  reason: created.reason,
+                  publishedAt: created.publishedAt,
+                },
+                { emailOptIn: kw.notifyEmail },
+              );
             }
           }
         }

@@ -2,7 +2,15 @@ import Firecrawl from "@mendable/firecrawl-js";
 import { getOpenRouter, DEFAULT_MODEL } from "./openrouter";
 
 // URL 指向真实可读文章的源（视频源不抓取，没有正文）
-export const SCRAPABLE_SOURCES = new Set(["bing", "google", "hackernews", "sogou"]);
+export const SCRAPABLE_SOURCES = new Set([
+  "bing",
+  "google",
+  "hackernews",
+  "sogou",
+  "baidu",
+  "ai_blog",
+  "ai_news_zh",
+]);
 export const MAX_LENGTH = 8000;
 const MIN_VALID_LENGTH = 200;
 // LLM 清洗：默认开。CLEAN_RAW_WITH_LLM=false 关闭后回退到 Firecrawl 原始 markdown

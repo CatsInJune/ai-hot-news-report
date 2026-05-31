@@ -18,7 +18,7 @@ export default function HomePage() {
         <div className="relative">
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-medium bg-accent-soft text-accent-bright border border-accent/20 mb-4">
             <span className="w-1 h-1 rounded-full bg-accent-bright pulse-dot" />
-            Live · 8 sources streaming
+            Live · 12 sources streaming
           </span>
 
           <h1 className="text-[28px] md:text-[34px] font-semibold tracking-tight leading-[1.15] text-text-primary max-w-2xl">
@@ -26,7 +26,7 @@ export default function HomePage() {
           </h1>
 
           <p className="mt-3 max-w-xl text-[14px] text-text-secondary leading-relaxed">
-            8 个源 · 全天候扫描 · 自动过滤噪声 ·{" "}
+            12 个源 · 全天候扫描 · 自动过滤噪声 ·{" "}
             <span className="text-text-primary">命中关键词秒级推送</span>
           </p>
 
@@ -34,7 +34,7 @@ export default function HomePage() {
           <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-2 text-[12px] text-text-muted">
             <span className="inline-flex items-center gap-1.5">
               <span className="w-1 h-1 rounded-full bg-accent-bright" />
-              Twitter · HN · Bing · Google · 微博 · B站 · 搜狗
+              Twitter · HN · Reddit · arXiv · Bing · Google · 百度 · 搜狗 · 微博 · B站 · AI 官博 · AI 媒体
             </span>
           </div>
         </div>
