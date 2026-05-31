@@ -8,6 +8,7 @@ import {
   sendWechatDigest,
   verifyWechatWebhook,
 } from "@/lib/wechat";
+import { maskEmail } from "@/lib/mask";
 
 // 2 条样例命中（urgent + high），同时给邮件 / 微信测试使用
 const SAMPLE_ITEMS: AlertItem[] = [
@@ -45,14 +46,16 @@ export async function GET() {
 
   const wechatUrls = getWechatWebhookUrls();
 
-  // 环境变量配置状态（不返回值，仅返回是否配置）
+  // 环境变量配置状态（不返回原始值，敏感字段一律脱敏）
+  const rawEmail = process.env.NOTIFICATION_EMAIL?.trim() ?? "";
   const env = {
     openrouter: !!process.env.OPENROUTER_API_KEY,
     twitter: !!process.env.TWITTER_API_KEY,
     firecrawl: !!process.env.FIRECRAWL_API_KEY,
     smtp: !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS),
     model: process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash",
-    notificationEmail: process.env.NOTIFICATION_EMAIL ?? "",
+    notificationEmail: maskEmail(rawEmail),
+    notificationEmailConfigured: !!rawEmail,
     collectionCron: process.env.COLLECTION_CRON ?? "*/30 * * * *",
     wechat: {
       configured: wechatUrls.length > 0,
@@ -83,7 +86,7 @@ export async function POST(req: NextRequest) {
       );
     }
     const sent = await sendKeywordDigest({ to, items: SAMPLE_ITEMS });
-    return NextResponse.json({ ok: sent, to });
+    return NextResponse.json({ ok: sent, to: maskEmail(to) });
   }
   if (body.action === "test-wechat") {
     const urls = getWechatWebhookUrls();
