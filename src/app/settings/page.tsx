@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, X, Info } from "lucide-react";
+import { Check, X, Info, Power } from "lucide-react";
 import { motion } from "framer-motion";
 import { useCallback, useEffect, useState } from "react";
 
@@ -13,6 +13,7 @@ interface EnvStatus {
   notificationEmail: string;            // 已脱敏，如 r***r@example.com
   notificationEmailConfigured: boolean; // 真正的"是否已配置"判断
   collectionCron: string;
+  collectionEnabled: boolean;
   wechat: {
     configured: boolean;
     count: number;
@@ -30,6 +31,7 @@ export default function SettingsPage() {
   const [sendingTest, setSendingTest] = useState(false);
   const [sendingWechat, setSendingWechat] = useState(false);
   const [pinging, setPinging] = useState(false);
+  const [togglingCollection, setTogglingCollection] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -125,6 +127,30 @@ export default function SettingsPage() {
       setPingResult(`失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setPinging(false);
+    }
+  };
+
+  const toggleCollection = async () => {
+    if (!env) return;
+    const next = !env.collectionEnabled;
+    setTogglingCollection(true);
+    // 乐观更新
+    setEnv({ ...env, collectionEnabled: next });
+    try {
+      const res = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "toggle-collection", enabled: next }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        // 回滚
+        setEnv((cur) => (cur ? { ...cur, collectionEnabled: !next } : cur));
+      }
+    } catch {
+      setEnv((cur) => (cur ? { ...cur, collectionEnabled: !next } : cur));
+    } finally {
+      setTogglingCollection(false);
     }
   };
 
@@ -285,6 +311,26 @@ export default function SettingsPage() {
       </Section>
 
       <Section title="运行时配置">
+        <div className="px-5 py-3 flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13.5px] font-medium text-text-primary">定时采集</div>
+            <p className="text-[12px] text-text-secondary mt-1">
+              关闭后 cron 触发会立即跳过，不消耗 AI 配额。手动调用 <code className="mono text-text-muted">/api/collect</code> 同样跳过。
+            </p>
+          </div>
+          <button
+            onClick={toggleCollection}
+            disabled={!env || togglingCollection}
+            className={`h-8 px-3 rounded-md border text-[12.5px] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 ${
+              env?.collectionEnabled
+                ? "border-accent/30 text-accent-bright hover:bg-accent-soft"
+                : "border-border-strong text-text-muted hover:border-accent/40 hover:text-accent-bright"
+            }`}
+          >
+            <Power className="w-3.5 h-3.5" />
+            {env?.collectionEnabled ? "已启用" : "已暂停"}
+          </button>
+        </div>
         <InfoRow label="AI 模型" value={env?.model ?? "—"} />
         <InfoRow label="采集频率" value={env?.collectionCron ?? "—"} />
       </Section>

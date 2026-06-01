@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getCollectionEnabled } from "@/lib/runtime-settings";
 import { analyzeBatch } from "@/lib/analyzer";
 import { expandKeyword, preMatchKeyword } from "@/lib/keyword-expander";
 import { detectAccounts } from "@/lib/account-detector";
@@ -135,7 +136,20 @@ export async function collectAll(): Promise<{
   results: CollectResult[];
   analyzed: number;
   dropped: { title: number; age: number; spam: number; relev: number; quota: number };
+  skipped?: boolean;
 }> {
+  if (!(await getCollectionEnabled())) {
+    return {
+      total: 0,
+      newCount: 0,
+      hitCount: 0,
+      results: [],
+      analyzed: 0,
+      dropped: { title: 0, age: 0, spam: 0, relev: 0, quota: 0 },
+      skipped: true,
+    };
+  }
+
   const keywords = await prisma.keyword.findMany({ where: { active: true } });
 
   const allItems: CollectedItem[] = [];
