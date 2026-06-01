@@ -22,7 +22,7 @@ Not a "topic feed" — this is **"where on the internet are the people and thing
 | Layer | Choice |
 |---|---|
 | Framework | Next.js 16 · React 19 · Tailwind v4 |
-| Data | Prisma 7 + SQLite (better-sqlite3 adapter) |
+| Data | Prisma 7 + PostgreSQL (pg adapter) |
 | AI | DeepSeek direct API ($0.07 / $0.27 per 1M for v3), OpenRouter fallback |
 | Scraping | Firecrawl + rss-parser + cheerio |
 | Realtime | Next.js ReadableStream + global SSE singleton |
@@ -54,8 +54,8 @@ cp .env.example .env
 # AI analysis (one required; DeepSeek direct API recommended)
 DEEPSEEK_API_KEY="sk-xxx"
 
-# Database
-DATABASE_URL="file:./dev.db"
+# Database (PostgreSQL)
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/ai_hot_news"
 ```
 
 **Full feature set** also wants:
@@ -79,12 +79,22 @@ NOTIFICATION_EMAIL="you@example.com"
 WECHAT_WEBHOOK_URL="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
 ```
 
-### 3. Initialize the database
+### 3. Start PostgreSQL & initialize the database
+
+Spin up a local Postgres via Docker (one-time):
 
 ```bash
-npx prisma migrate dev
+docker compose up -d db
+```
+
+Then apply migrations and generate the Prisma client:
+
+```bash
+npx prisma migrate deploy
 npx prisma generate
 ```
+
+> Already have a hosted Postgres (Neon, Supabase, Vercel Postgres, etc.)? Just set `DATABASE_URL` in `.env` and skip the Docker step.
 
 ### 4. Boot
 
@@ -218,7 +228,7 @@ npx prisma migrate dev --name <migration_name>
 npx prisma generate
 
 # Clear topics + notifications (keep keyword config)
-node -e "const Database=require('better-sqlite3');const db=new Database('./dev.db');db.prepare('DELETE FROM Topic').run();db.prepare('DELETE FROM Notification').run();db.close()"
+npx prisma db execute --stdin <<< 'DELETE FROM "Topic"; DELETE FROM "Notification";'
 
 # Trigger one collection cycle
 curl -X POST http://localhost:3000/api/collect
@@ -230,7 +240,7 @@ curl -X POST http://localhost:3000/api/collect
 |---|---|---|
 | `DEEPSEEK_API_KEY` | ⭐ | DeepSeek direct API, preferred over OpenRouter |
 | `OPENROUTER_API_KEY` | ⭐ | Fallback when DeepSeek is unset |
-| `DATABASE_URL` | ✅ | SQLite path, defaults to `file:./dev.db` |
+| `DATABASE_URL` | ✅ | PostgreSQL connection string (local Docker, Vercel Postgres, Neon, etc.) |
 | `TWITTER_API_KEY` | | twitterapi.io; collector skipped without it |
 | `FIRECRAWL_API_KEY` | | Deep article extraction; only RSS snippets without it |
 | `SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` | | Email channel |
@@ -248,7 +258,7 @@ curl -X POST http://localhost:3000/api/collect
 
 - **Restart `dev` after schema changes** — the Prisma client is a per-process singleton; hot reload won't pick it up
 - **Restart `dev` after `.env` changes** — Next.js does not auto-reload env vars
-- **`dev.db` is gitignored** — migrations are checked in; a fresh clone just needs `prisma migrate dev`
+- **Local DB lives in Docker** — `docker compose up -d db` boots a Postgres on **host port 5433** (avoids clashing with any native Postgres on 5432); migrations are checked in, so a fresh clone just needs `prisma migrate deploy`
 - **Old rows don't auto-backfill new fields** — e.g. after adding `translations`, existing Topics stay empty until translated on demand
 
 ## License
