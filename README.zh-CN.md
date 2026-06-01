@@ -22,7 +22,7 @@
 | 层 | 选型 |
 |---|---|
 | 框架 | Next.js 16 · React 19 · Tailwind v4 |
-| 数据 | Prisma 7 + SQLite (better-sqlite3 adapter) |
+| 数据 | Prisma 7 + PostgreSQL (pg adapter) |
 | AI | DeepSeek 直连（v3 $0.07/$0.27 per 1M），OpenRouter 作为备用 |
 | 抓取 | Firecrawl + rss-parser + cheerio |
 | 实时 | Next.js ReadableStream + 全局 SSE 单例 |
@@ -54,8 +54,8 @@ cp .env.example .env
 # AI 分析（必填二选一，推荐 DeepSeek 直连）
 DEEPSEEK_API_KEY="sk-xxx"
 
-# 数据库
-DATABASE_URL="file:./dev.db"
+# 数据库（PostgreSQL）
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ai_hot_news"
 ```
 
 **完整功能**还需要：
@@ -79,12 +79,22 @@ NOTIFICATION_EMAIL="收件邮箱"
 WECHAT_WEBHOOK_URL="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx"
 ```
 
-### 3. 初始化数据库
+### 3. 启动 PostgreSQL 并初始化数据库
+
+用 Docker 起一个本地 Postgres（一次性）：
 
 ```bash
-npx prisma migrate dev
+docker compose up -d db
+```
+
+然后跑 migration 并生成 Prisma client：
+
+```bash
+npx prisma migrate deploy
 npx prisma generate
 ```
+
+> 已经有托管 Postgres（Neon、Supabase、Vercel Postgres 等）？直接在 `.env` 里填 `DATABASE_URL` 即可，跳过 Docker。
 
 ### 4. 启动
 
@@ -216,7 +226,7 @@ npx prisma migrate dev --name <migration_name>
 npx prisma generate
 
 # 清空 Topic / Notification（保留 Keyword 配置）
-node -e "const Database=require('better-sqlite3');const db=new Database('./dev.db');db.prepare('DELETE FROM Topic').run();db.prepare('DELETE FROM Notification').run();db.close()"
+npx prisma db execute --stdin <<< 'DELETE FROM "Topic"; DELETE FROM "Notification";'
 
 # 触发一次采集
 curl -X POST http://localhost:3000/api/collect
@@ -228,7 +238,7 @@ curl -X POST http://localhost:3000/api/collect
 |---|---|---|
 | `DEEPSEEK_API_KEY` | ⭐ | DeepSeek 直连，优先于 OpenRouter |
 | `OPENROUTER_API_KEY` | ⭐ | DeepSeek 未配时回退方案 |
-| `DATABASE_URL` | ✅ | SQLite 路径，默认 `file:./dev.db` |
+| `DATABASE_URL` | ✅ | PostgreSQL 连接串（本地 Docker / Vercel Postgres / Neon 等） |
 | `TWITTER_API_KEY` | | twitterapi.io，未配则跳过 Twitter |
 | `FIRECRAWL_API_KEY` | | 正文深度抓取，未配则只用 RSS snippet |
 | `SMTP_HOST` / `SMTP_USER` / `SMTP_PASS` | | 邮件通道 |
@@ -246,7 +256,7 @@ curl -X POST http://localhost:3000/api/collect
 
 - **改 schema 后必须重启 dev server**：Prisma client 是进程内单例，热重载不会更新
 - **改 `.env` 后必须重启 dev server**：Next.js 不会自动重载环境变量
-- **dev.db 会被 .gitignore**：迁移文件已纳入版本控制，重新克隆只需 `prisma migrate dev`
+- **本地数据库在 Docker 里**：`docker compose up -d db` 起一个 5432 端口的 Postgres；migration 已纳入版本控制，重新克隆只需 `prisma migrate deploy`
 - **历史数据不会自动补字段**：例如新增"翻译缓存"后，旧 Topic 的 `translations` 仍为空，按需翻译才会写入
 
 ## License
