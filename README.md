@@ -114,6 +114,8 @@ Trigger a collection manually (runs every 30 min automatically by default):
 curl -X POST http://localhost:3000/api/collect
 ```
 
+Or click the **Fetch** button in the top bar. To pause/resume the schedule (locally or in prod) flip the toggle on the **Settings → 运行时配置** page; collections are then short-circuited at the `collectAll()` entrypoint, so no AI quota is consumed.
+
 ## Notification setup
 
 ### Email SMTP
@@ -144,6 +146,47 @@ WeChat (personal) does **not** allow third-party API push. The cleanest path is 
 4. Restart `dev`, go to Settings → **微信推送 (WeChat)** → click **Ping Webhook** to verify
 
 To mirror messages to your **personal WeChat**: in the WeChat Work app → Me → 关注的企业 → bind personal WeChat.
+
+## Deployment (Vercel + GitHub Actions)
+
+The project is shipped on Vercel with a hosted PostgreSQL (Vercel Postgres / Neon / etc.). Because Vercel functions are short-lived, the in-process `node-cron` scheduler can't run — scheduling is offloaded to **GitHub Actions**.
+
+### Why GitHub Actions (not Vercel Cron)?
+
+Vercel Hobby plan limits cron to **once per day** with hourly precision. We want every 30 min. GitHub Actions schedules are free up to the workflow minute quota and easily handle `*/30 * * * *`.
+
+### Topology
+
+```
+GitHub Actions schedule (*/30 * * * *)
+  └─ curl -X POST https://<prod>/api/collect
+       Authorization: Bearer ${CRON_SECRET}
+         └─ Vercel function → collectAll()
+              └─ Postgres + AI analysis + notifications
+```
+
+### `/api/collect` auth model
+
+| Caller | Signal | Allowed? |
+|---|---|---|
+| Browser **Fetch** button (same-origin) | `Sec-Fetch-Site: same-origin` | ✅ |
+| GitHub Actions / curl | `Authorization: Bearer <CRON_SECRET>` | ✅ |
+| Local dev with no `CRON_SECRET` set | — | ✅ |
+| Anything else (public scraping, cross-site fetch) | — | ❌ 401 |
+
+`Sec-Fetch-Site` is a browser-managed [forbidden header](https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_header_name) — JS can't fake it, attacker pages will be `cross-site`.
+
+### One-time setup
+
+1. `vercel link` and create a Postgres on the **Storage** tab of the project (auto-injects `DATABASE_URL` etc.)
+2. Set non-DB env vars in the Vercel dashboard (one per `.env.example` row).
+3. Generate a shared secret and put it in **both** places:
+   ```bash
+   SEC=$(openssl rand -hex 32)
+   echo "$SEC" | gh secret set CRON_SECRET --repo <owner>/<repo>
+   vercel env add CRON_SECRET production --value "$SEC" --yes
+   ```
+4. Commit [`.github/workflows/collect.yml`](.github/workflows/collect.yml); subsequent merges to `main` deploy automatically.
 
 ## Layout
 
@@ -249,7 +292,8 @@ curl -X POST http://localhost:3000/api/collect
 | `WECHAT_DIGEST_MAX_LINES` | | Max hits shown per digest card, default 5 |
 | `EMAIL_DIGEST_WINDOW_MS` | | Aggregation window in ms, default 300000 (5 min) |
 | `EMAIL_DIGEST_MAX_ITEMS` | | Max items per digest, default 20 |
-| `COLLECTION_CRON` | | Cron expression, default `*/30 * * * *` |
+| `COLLECTION_CRON` | | Local `node-cron` schedule, default `*/30 * * * *` (prod scheduling is GitHub Actions, see [Deployment](#deployment-vercel--github-actions)) |
+| `CRON_SECRET` | prod | Bearer token GitHub Actions sends when hitting `/api/collect`; required in prod, optional locally |
 | `CLEAN_RAW_WITH_LLM` | | LLM-clean article bodies, default `true` |
 
 ⭐ = at least one of `DEEPSEEK_API_KEY` or `OPENROUTER_API_KEY` must be configured
