@@ -55,7 +55,7 @@ cp .env.example .env
 DEEPSEEK_API_KEY="sk-xxx"
 
 # 数据库（PostgreSQL）
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ai_hot_news"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/ai_hot_news"
 ```
 
 **完整功能**还需要：
@@ -256,7 +256,7 @@ curl -X POST http://localhost:3000/api/collect
 
 - **改 schema 后必须重启 dev server**：Prisma client 是进程内单例，热重载不会更新
 - **改 `.env` 后必须重启 dev server**：Next.js 不会自动重载环境变量
-- **本地数据库在 Docker 里**：`docker compose up -d db` 起一个 5432 端口的 Postgres；migration 已纳入版本控制，重新克隆只需 `prisma migrate deploy`
+- **本地数据库在 Docker 里**：`docker compose up -d db` 起一个 Postgres，**主机端口是 5433**（避开本机已有的 5432 原生 Postgres）；migration 已纳入版本控制，重新克隆只需 `prisma migrate deploy`
 - **历史数据不会自动补字段**：例如新增"翻译缓存"后，旧 Topic 的 `translations` 仍为空，按需翻译才会写入
 
 ## License

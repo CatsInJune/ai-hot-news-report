@@ -55,7 +55,7 @@ cp .env.example .env
 DEEPSEEK_API_KEY="sk-xxx"
 
 # Database (PostgreSQL)
-DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ai_hot_news"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5433/ai_hot_news"
 ```
 
 **Full feature set** also wants:
@@ -258,7 +258,7 @@ curl -X POST http://localhost:3000/api/collect
 
 - **Restart `dev` after schema changes** — the Prisma client is a per-process singleton; hot reload won't pick it up
 - **Restart `dev` after `.env` changes** — Next.js does not auto-reload env vars
-- **Local DB lives in Docker** — `docker compose up -d db` boots a Postgres on port 5432; migrations are checked in, so a fresh clone just needs `prisma migrate deploy`
+- **Local DB lives in Docker** — `docker compose up -d db` boots a Postgres on **host port 5433** (avoids clashing with any native Postgres on 5432); migrations are checked in, so a fresh clone just needs `prisma migrate deploy`
 - **Old rows don't auto-backfill new fields** — e.g. after adding `translations`, existing Topics stay empty until translated on demand
 
 ## License
