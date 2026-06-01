@@ -50,3 +50,5 @@ next-env.d.ts
 *.db-journal
 docs/screenshots/
 tmp-*.log
+
+.claude/settings.local.json

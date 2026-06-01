@@ -9,6 +9,7 @@ import {
   verifyWechatWebhook,
 } from "@/lib/wechat";
 import { maskEmail } from "@/lib/mask";
+import { getCollectionEnabled, setCollectionEnabled } from "@/lib/runtime-settings";
 
 // 2 条样例命中（urgent + high），同时给邮件 / 微信测试使用
 const SAMPLE_ITEMS: AlertItem[] = [
@@ -57,6 +58,7 @@ export async function GET() {
     notificationEmail: maskEmail(rawEmail),
     notificationEmailConfigured: !!rawEmail,
     collectionCron: process.env.COLLECTION_CRON ?? "*/30 * * * *",
+    collectionEnabled: await getCollectionEnabled(),
     wechat: {
       configured: wechatUrls.length > 0,
       count: wechatUrls.length,
@@ -126,6 +128,16 @@ export async function POST(req: NextRequest) {
         error: r.error,
       })),
     });
+  }
+  if (body.action === "toggle-collection") {
+    if (typeof body.enabled !== "boolean") {
+      return NextResponse.json(
+        { ok: false, error: "enabled 必须是 boolean" },
+        { status: 400 },
+      );
+    }
+    await setCollectionEnabled(body.enabled);
+    return NextResponse.json({ ok: true, enabled: body.enabled });
   }
   if (body.action === "flush-digests") {
     const before = getQueueStats();
