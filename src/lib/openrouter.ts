@@ -12,6 +12,7 @@ let _client: OpenAI | null = null;
 export function getOpenRouter(): OpenAI | null {
   if (_client) return _client;
 
+  // GitHub Actions 把未设的 secret 注入成 ""，所以用 truthy 判断而不是 != null
   const deepseekKey = process.env.DEEPSEEK_API_KEY;
   if (deepseekKey) {
     _client = new OpenAI({
@@ -42,6 +43,8 @@ export function getOpenRouter(): OpenAI | null {
  * - 直连 DeepSeek：用 DeepSeek 官方模型名（deepseek-chat / deepseek-reasoner），通过 DEEPSEEK_MODEL 覆盖
  * - 走 OpenRouter：用 OpenRouter 格式 (provider/model)，通过 OPENROUTER_MODEL 覆盖
  */
+// 用 || 而不是 ??：GitHub Actions 会把未设的 secret 注入成 ""，
+// ?? 只对 null/undefined 兜底，空字符串会原样穿透导致 model 名为空
 export const DEFAULT_MODEL = process.env.DEEPSEEK_API_KEY
-  ? (process.env.DEEPSEEK_MODEL ?? "deepseek-chat")
-  : (process.env.OPENROUTER_MODEL ?? "google/gemini-2.5-flash");
+  ? (process.env.DEEPSEEK_MODEL || "deepseek-chat")
+  : (process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash");
