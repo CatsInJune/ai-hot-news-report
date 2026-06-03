@@ -29,8 +29,8 @@ interface Stats {
 export default function TopBar() {
   const pathname = usePathname();
   const [stats, setStats] = useState<Stats>({ total: 0, today: 0 });
-  const [collecting, setCollecting] = useState(false);
   const [unread, setUnread] = useState(0);
+  const [collecting, setCollecting] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,9 +63,16 @@ export default function TopBar() {
   const handleCollect = async () => {
     setCollecting(true);
     try {
-      await fetch("/api/collect", { method: "POST" });
-    } finally {
-      setTimeout(() => setCollecting(false), 600);
+      const res = await fetch("/api/collect", { method: "POST" });
+      const body = await res.json().catch(() => ({}));
+      // workflow_dispatch 模式下 runner 启动需 ~30-60s，给点 UI 反馈
+      if (body?.mode === "workflow_dispatch") {
+        setTimeout(() => setCollecting(false), 1500);
+      } else {
+        setCollecting(false);
+      }
+    } catch {
+      setCollecting(false);
     }
   };
 
@@ -151,7 +158,7 @@ export default function TopBar() {
               className={cn("w-3.5 h-3.5", collecting && "animate-spin")}
             />
             <span className="hidden md:inline">
-              {collecting ? "Fetching" : "Fetch"}
+              {collecting ? "Dispatching" : "Fetch"}
             </span>
           </button>
         </div>

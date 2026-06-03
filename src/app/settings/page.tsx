@@ -315,7 +315,7 @@ export default function SettingsPage() {
           <div className="min-w-0 flex-1">
             <div className="text-[13.5px] font-medium text-text-primary">定时采集</div>
             <p className="text-[12px] text-text-secondary mt-1">
-              关闭后 cron 触发会立即跳过，不消耗 AI 配额。手动调用 <code className="mono text-text-muted">/api/collect</code> 同样跳过。
+              关闭后 GitHub Actions 定时触发与顶栏 Fetch 按钮都会在 <code className="mono text-text-muted">collectAll()</code> 入口跳过，不消耗 AI 配额。开关存在数据库，本地与生产共享同一状态。
             </p>
           </div>
           <button
