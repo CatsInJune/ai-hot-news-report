@@ -46,7 +46,7 @@ export async function sendKeywordDigest(data: {
   const fromUser = process.env.SMTP_USER!;
 
   try {
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: `"${fromName}" <${fromUser}>`,
       to: data.to,
       subject: buildSubject(data.items),
@@ -55,6 +55,9 @@ export async function sendKeywordDigest(data: {
       // → 强制写本地 +0800 这种带 offset 的 RFC2822，所有客户端都能正确解读
       date: formatRFC2822(new Date()),
     });
+    console.log(
+      `[Mailer] 邮件已发送 to=${data.to} items=${data.items.length} messageId=${info.messageId ?? "-"}`,
+    );
     return true;
   } catch (err) {
     console.error("[Mailer] 发送失败:", err instanceof Error ? err.message : err);

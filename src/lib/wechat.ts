@@ -38,8 +38,15 @@ export function maskWebhookUrl(url: string): string {
   }
 }
 
-/** 发送 markdown 消息到单个 webhook */
-async function postMarkdown(webhookUrl: string, content: string): Promise<{ ok: boolean; error?: string }> {
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** 发送 markdown 消息到单个 webhook，针对 45033 并发限流自动重试 */
+async function postMarkdown(
+  webhookUrl: string,
+  content: string,
+  attempt = 1,
+): Promise<{ ok: boolean; error?: string }> {
+  const MAX_ATTEMPTS = 3;
   try {
     const res = await fetch(webhookUrl, {
       method: "POST",
@@ -55,6 +62,15 @@ async function postMarkdown(webhookUrl: string, content: string): Promise<{ ok: 
     }
     const data = (await res.json()) as { errcode?: number; errmsg?: string };
     if (data.errcode && data.errcode !== 0) {
+      // 45033 = api concurrent out of limit；指数退避重试
+      if (data.errcode === 45033 && attempt < MAX_ATTEMPTS) {
+        const backoff = attempt * 1500;
+        console.warn(
+          `[WeChat] 45033 并发限流，${backoff}ms 后重试（第 ${attempt + 1}/${MAX_ATTEMPTS} 次）`,
+        );
+        await sleep(backoff);
+        return postMarkdown(webhookUrl, content, attempt + 1);
+      }
       return { ok: false, error: `errcode=${data.errcode} ${data.errmsg ?? ""}` };
     }
     return { ok: true };
@@ -72,11 +88,19 @@ export async function sendWechatDigest(data: {
     return { ok: false, sent: 0, errors: [] };
   }
   const content = buildDigestMarkdown(data.items);
-  const results = await Promise.all(
-    data.webhookUrls.map((url) => postMarkdown(url, content)),
-  );
+  // 串行发送：企业微信 webhook 对同 IP 并发非常敏感（45033），不能 Promise.all
+  const results: Array<{ ok: boolean; error?: string }> = [];
+  for (let i = 0; i < data.webhookUrls.length; i++) {
+    if (i > 0) await sleep(1200); // webhook 间留间隔，避免限流
+    results.push(await postMarkdown(data.webhookUrls[i], content));
+  }
   const sent = results.filter((r) => r.ok).length;
   const errors = results.filter((r) => !r.ok).map((r) => r.error ?? "unknown");
+  if (sent > 0) {
+    console.log(
+      `[WeChat] digest 已发送 sent=${sent}/${data.webhookUrls.length} items=${data.items.length}`,
+    );
+  }
   return { ok: sent > 0, sent, errors };
 }
 
