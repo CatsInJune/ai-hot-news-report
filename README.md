@@ -147,9 +147,9 @@ WeChat (personal) does **not** allow third-party API push. The cleanest path is 
 
 To mirror messages to your **personal WeChat**: in the WeChat Work app → Me → 关注的企业 → bind personal WeChat.
 
-## Deployment (Vercel + GitHub Actions)
+## Deployment (Vercel + GitHub Actions + cron-job.org)
 
-The project is shipped on Vercel with a hosted PostgreSQL (Vercel Postgres / Neon / etc.). Vercel serves the UI + read APIs only; **the collector runs on a GitHub Actions runner** that connects directly to the same Postgres.
+The project is shipped on Vercel with a hosted PostgreSQL (Vercel Postgres / Neon / etc.). Vercel serves the UI + read APIs only; **the collector runs on a GitHub Actions runner** that connects directly to the same Postgres. Scheduling is handled by **cron-job.org**, which POSTs to Vercel `/api/collect` and triggers a `workflow_dispatch`.
 
 ### Why not let Vercel run the collector?
 
@@ -158,15 +158,21 @@ The project is shipped on Vercel with a hosted PostgreSQL (Vercel Postgres / Neo
 
 GitHub Actions sidesteps both: free, generous minute budget, and the runner can run as long as `timeout-minutes` allows.
 
+### Why not GitHub Actions `schedule:`?
+
+Tried it — the `schedule:` trigger at peak times like `:00` / `:30` is **regularly delayed by 2–5 hours** on free runners (GitHub does not guarantee timeliness). cron-job.org is a free external scheduler that fires on-the-second, so we let it POST to our `/api/collect` and let `/api/collect` dispatch the workflow. The collect.yml only declares `on: workflow_dispatch`.
+
 ### Topology
 
 ```
 Scheduled (every 30 min)                Manual (Fetch button in top bar)
-  GitHub Actions cron *  *  *  *  *      Vercel /api/collect
-                              │                  │
-                              │                  └─ POST workflow_dispatch
-                              │                     (uses GITHUB_TOKEN)
-                              ▼                  ▼
+  cron-job.org                            Vercel /api/collect
+        │                                          │
+        └─ HTTP POST → Vercel /api/collect ────────┘
+                              │
+                              └─ POST workflow_dispatch
+                                 (uses GITHUB_TOKEN)
+                              ▼
                   GitHub Actions runner: npm ci + prisma generate + npm run collect
                               │
                               └─ scripts/collect.ts → collectAll()
@@ -177,14 +183,18 @@ Vercel only serves the Next.js app + a thin `/api/collect` that **dispatches** t
 
 ### One-time setup
 
-1. **Vercel** — `vercel link`, create a Postgres on the **Storage** tab (auto-injects `DATABASE_URL`), then add the non-DB env vars (per `.env.example`). For the Fetch button to work in prod, also set:
+1. **Vercel** — `vercel link`, create a Postgres on the **Storage** tab (auto-injects `DATABASE_URL`), then add the non-DB env vars (per `.env.example`). For the Fetch button + cron-job.org dispatch to work in prod, also set:
    - `GITHUB_TOKEN` — fine-grained PAT with **Actions: Read and write** permission on this repo
    - `GITHUB_REPO` — `owner/repo`, e.g. `CatsInJune/ai-hot-news-report`
 2. **GitHub Actions secrets** — copy the runner's env vars into the repo's `Settings → Secrets and variables → Actions`. At minimum:
    - `DATABASE_URL` (must point to the **same** Postgres Vercel uses)
    - `DEEPSEEK_API_KEY` (or `OPENROUTER_API_KEY`)
    - Optional: `TWITTER_API_KEY`, `FIRECRAWL_API_KEY`, SMTP block, `NOTIFICATION_EMAIL`, `WECHAT_WEBHOOK_URL`
-3. Commit [`.github/workflows/collect.yml`](.github/workflows/collect.yml). The first scheduled run lands within 30 min; trigger immediately via the top-bar **Fetch** button or **Actions → Scheduled collect → Run workflow**.
+3. **cron-job.org** — register a free account, create a job:
+   - URL: `https://<your-vercel-domain>/api/collect`
+   - Method: `POST`
+   - Schedule: every 30 min (or whatever cadence you want)
+4. Commit [`.github/workflows/collect.yml`](.github/workflows/collect.yml). Trigger immediately via the top-bar **Fetch** button or **Actions → Scheduled collect → Run workflow** to verify.
 
 ## Layout
 
@@ -290,7 +300,7 @@ npm run collect
 | `WECHAT_DIGEST_MAX_LINES` | | Max hits shown per digest card, default 5 |
 | `EMAIL_DIGEST_WINDOW_MS` | | Aggregation window in ms, default 300000 (5 min) |
 | `EMAIL_DIGEST_MAX_ITEMS` | | Max items per digest, default 20 |
-| `COLLECTION_CRON` | | Local `node-cron` schedule, default `*/30 * * * *` (prod scheduling is GitHub Actions, see [Deployment](#deployment-vercel--github-actions)) |
+| `COLLECTION_CRON` | | Local `node-cron` schedule, default `*/30 * * * *` (prod scheduling is cron-job.org → GitHub Actions, see [Deployment](#deployment-vercel--github-actions--cron-joborg)) |
 | `CLEAN_RAW_WITH_LLM` | | LLM-clean article bodies, default `true` |
 
 ⭐ = at least one of `DEEPSEEK_API_KEY` or `OPENROUTER_API_KEY` must be configured

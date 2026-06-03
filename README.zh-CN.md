@@ -145,9 +145,9 @@ SMTP_PASS="在QQ邮箱设置→账户里生成的授权码（16位）"
 
 想让通知同步到**手机微信**：企业微信 → 我 → 关注的企业 → 绑定个人微信。
 
-## 部署（Vercel + GitHub Actions）
+## 部署（Vercel + GitHub Actions + cron-job.org）
 
-线上跑在 Vercel + 托管 Postgres（Vercel Postgres / Neon 等）。Vercel 只负责 UI + 读 API；**采集任务跑在 GitHub Actions runner 上**，直接连同一个 Postgres。
+线上跑在 Vercel + 托管 Postgres（Vercel Postgres / Neon 等）。Vercel 只负责 UI + 读 API；**采集任务跑在 GitHub Actions runner 上**，直接连同一个 Postgres。定时调度交给 **cron-job.org**：它定点 POST Vercel 的 `/api/collect`，由 `/api/collect` 派发 `workflow_dispatch`。
 
 ### 为什么采集器不放在 Vercel 上？
 
@@ -156,33 +156,43 @@ SMTP_PASS="在QQ邮箱设置→账户里生成的授权码（16位）"
 
 GitHub Actions 两个限制都没有：免费分钟数充足，runner 跑多久由 `timeout-minutes` 决定。
 
+### 为什么不用 GitHub Actions 自带的 `schedule:`？
+
+试过——免费 runner 的 `schedule:` 触发在 `:00` / `:30` 这种高峰点**实测会被延迟 2–5 小时**（GitHub 不保证准点）。改用 cron-job.org 这种免费外部调度器，准点 POST 到 `/api/collect`，再由它派发 workflow。collect.yml 只声明 `on: workflow_dispatch`，不再带 `schedule:`。
+
 ### 拓扑
 
 ```
 定时（每 30 分钟）                       主动（顶栏 Fetch 按钮）
-  GitHub Actions cron                    Vercel /api/collect
-                  │                            │
-                  │                            └─ POST workflow_dispatch
-                  │                               （用 GITHUB_TOKEN）
-                  ▼                            ▼
-        GitHub Actions runner: npm ci + prisma generate + npm run collect
-                  │
-                  └─ scripts/collect.ts → collectAll()
-                        └─ Postgres（与 Vercel 同一个） + AI + 邮件 / 微信
+  cron-job.org                             Vercel /api/collect
+        │                                          │
+        └─ HTTP POST → Vercel /api/collect ────────┘
+                              │
+                              └─ POST workflow_dispatch
+                                 （用 GITHUB_TOKEN）
+                              ▼
+              GitHub Actions runner: npm ci + prisma generate + npm run collect
+                              │
+                              └─ scripts/collect.ts → collectAll()
+                                    └─ Postgres（与 Vercel 同一个） + AI + 邮件 / 微信
 ```
 
 Vercel 只剩 Next.js app + 一个超薄的 `/api/collect`（它只**派发** workflow，不真跑采集）。
 
 ### 一次性配置
 
-1. **Vercel** —— `vercel link`，**Storage** tab 创建 Postgres（自动注入 `DATABASE_URL`），把 `.env.example` 里非 DB 的变量同步到 Vercel。想让顶栏 Fetch 按钮在线上能用，再额外配两个：
+1. **Vercel** —— `vercel link`，**Storage** tab 创建 Postgres（自动注入 `DATABASE_URL`），把 `.env.example` 里非 DB 的变量同步到 Vercel。想让顶栏 Fetch 按钮 + cron-job.org 派发在线上能用，再额外配两个：
    - `GITHUB_TOKEN` —— fine-grained PAT，权限：本仓库 **Actions: Read and write**
    - `GITHUB_REPO` —— `owner/repo`，例如 `CatsInJune/ai-hot-news-report`
 2. **GitHub Actions secrets** —— 在仓库 `Settings → Secrets and variables → Actions` 配 runner 跑采集需要的 env，至少要有：
    - `DATABASE_URL`（必须与 Vercel 用的是**同一个** Postgres）
    - `DEEPSEEK_API_KEY`（或 `OPENROUTER_API_KEY`）
    - 可选：`TWITTER_API_KEY`、`FIRECRAWL_API_KEY`、SMTP 全套、`NOTIFICATION_EMAIL`、`WECHAT_WEBHOOK_URL`
-3. 提交 [`.github/workflows/collect.yml`](.github/workflows/collect.yml)。首次定时跑会在 30 分钟内来；想立刻验证：点顶栏 **Fetch** 按钮，或 **Actions → Scheduled collect → Run workflow**
+3. **cron-job.org** —— 注册一个免费账号，新建一个 job：
+   - URL：`https://<你的 Vercel 域名>/api/collect`
+   - Method：`POST`
+   - 频率：每 30 分钟（或你想要的节奏）
+4. 提交 [`.github/workflows/collect.yml`](.github/workflows/collect.yml)。验证：点顶栏 **Fetch** 按钮，或 **Actions → Scheduled collect → Run workflow** 手动跑一次
 
 ## 项目结构
 
@@ -288,7 +298,7 @@ npm run collect
 | `WECHAT_DIGEST_MAX_LINES` | | 单条 digest 最多展示几条命中，默认 5 |
 | `EMAIL_DIGEST_WINDOW_MS` | | 聚合窗口毫秒，默认 300000（5min） |
 | `EMAIL_DIGEST_MAX_ITEMS` | | 单封 digest 上限，默认 20 |
-| `COLLECTION_CRON` | | 本地 `node-cron` 的频率，默认 `*/30 * * * *`（线上调度走 GitHub Actions，见[部署](#部署vercel--github-actions)） |
+| `COLLECTION_CRON` | | 本地 `node-cron` 的频率，默认 `*/30 * * * *`（线上调度走 cron-job.org → GitHub Actions，见[部署](#部署vercel--github-actions--cron-joborg)） |
 | `CLEAN_RAW_WITH_LLM` | | 是否用 LLM 清洗正文，默认 `true` |
 
 ⭐ = `DEEPSEEK_API_KEY` 或 `OPENROUTER_API_KEY` 至少配置一个
