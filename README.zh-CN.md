@@ -108,13 +108,13 @@ npm run dev
 
 进入 `/keywords` 页面 → 新建关键词 → AI 会自动扩展变体并检测关联账号。
 
-手动触发一次采集（默认每 30 分钟自动跑一次）：
+手动触发一次采集——点顶栏 **Fetch** 按钮（dev 是同进程跑，线上是派发 GitHub Actions workflow），或者 CLI：
 
 ```bash
-curl -X POST http://localhost:3000/api/collect
+npm run collect
 ```
 
-也可以点顶栏的 **Fetch** 按钮。临时想停掉定时采集（本地或线上都行）—— 设置页 → **运行时配置** → 把"定时采集"切到「已暂停」即可，门闸在 `collectAll()` 入口直接跳过，不消耗 AI 配额。
+本地 dev 还会被进程内 `node-cron` 每 30 分钟自动跑一次。临时想停掉定时采集（本地或线上都行）—— 设置页 → **运行时配置** → 把"定时采集"切到「已暂停」即可，门闸在 `collectAll()` 入口直接跳过，不消耗 AI 配额。
 
 ## 通知配置
 
@@ -147,44 +147,42 @@ SMTP_PASS="在QQ邮箱设置→账户里生成的授权码（16位）"
 
 ## 部署（Vercel + GitHub Actions）
 
-线上跑在 Vercel + 托管 Postgres（Vercel Postgres / Neon 等）。Vercel function 是短命的，进程内的 `node-cron` 在 serverless 跑不起来，定时调度交给 **GitHub Actions**。
+线上跑在 Vercel + 托管 Postgres（Vercel Postgres / Neon 等）。Vercel 只负责 UI + 读 API；**采集任务跑在 GitHub Actions runner 上**，直接连同一个 Postgres。
 
-### 为什么不用 Vercel Cron？
+### 为什么采集器不放在 Vercel 上？
 
-Vercel Hobby 计划只允许 **一天一次**、精度小时级。需要每 30 分钟就只能上 Pro 或换别的调度器。GitHub Actions 免费且支持 `*/30 * * * *`。
+- Vercel Hobby 计划 function 超时硬上限 **60 秒**。`collectAll()` 跑 12 个源 + Firecrawl + LLM 清洗 + 评分通常远超 60s，必然 `FUNCTION_INVOCATION_TIMEOUT`。
+- Vercel Hobby Cron 又只允许 **一天一次** —— 需要每 30 分钟根本满足不了。
+
+GitHub Actions 两个限制都没有：免费分钟数充足，runner 跑多久由 `timeout-minutes` 决定。
 
 ### 拓扑
 
 ```
-GitHub Actions schedule (*/30 * * * *)
-  └─ curl -X POST https://<prod>/api/collect
-       Authorization: Bearer ${CRON_SECRET}
-         └─ Vercel function → collectAll()
-              └─ Postgres + AI 分析 + 通知
+定时（每 30 分钟）                       主动（顶栏 Fetch 按钮）
+  GitHub Actions cron                    Vercel /api/collect
+                  │                            │
+                  │                            └─ POST workflow_dispatch
+                  │                               （用 GITHUB_TOKEN）
+                  ▼                            ▼
+        GitHub Actions runner: npm ci + prisma generate + npm run collect
+                  │
+                  └─ scripts/collect.ts → collectAll()
+                        └─ Postgres（与 Vercel 同一个） + AI + 邮件 / 微信
 ```
 
-### `/api/collect` 鉴权模型
-
-| 调用方 | 判据 | 放行？ |
-|---|---|---|
-| 浏览器顶栏 Fetch 按钮（同源） | `Sec-Fetch-Site: same-origin` | ✅ |
-| GitHub Actions / curl | `Authorization: Bearer <CRON_SECRET>` | ✅ |
-| 本地未配置 `CRON_SECRET` | — | ✅ |
-| 其他（公网刷量、跨站 fetch 等） | — | ❌ 401 |
-
-`Sec-Fetch-Site` 是浏览器管控的 [Forbidden Header](https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_header_name)，JS 无法伪造，攻击者站点过来的请求是 `cross-site`。
+Vercel 只剩 Next.js app + 一个超薄的 `/api/collect`（它只**派发** workflow，不真跑采集）。
 
 ### 一次性配置
 
-1. `vercel link`，进项目 **Storage** tab 创建 Postgres（自动注入 `DATABASE_URL` 等）
-2. 把 `.env.example` 里的非 DB 变量按行同步到 Vercel 项目环境变量
-3. 生成一把共享 secret，**同时**写到两边：
-   ```bash
-   SEC=$(openssl rand -hex 32)
-   echo "$SEC" | gh secret set CRON_SECRET --repo <owner>/<repo>
-   vercel env add CRON_SECRET production --value "$SEC" --yes
-   ```
-4. 提交 [`.github/workflows/collect.yml`](.github/workflows/collect.yml) 即可；之后 push main 会自动触发部署
+1. **Vercel** —— `vercel link`，**Storage** tab 创建 Postgres（自动注入 `DATABASE_URL`），把 `.env.example` 里非 DB 的变量同步到 Vercel。想让顶栏 Fetch 按钮在线上能用，再额外配两个：
+   - `GITHUB_TOKEN` —— fine-grained PAT，权限：本仓库 **Actions: Read and write**
+   - `GITHUB_REPO` —— `owner/repo`，例如 `CatsInJune/ai-hot-news-report`
+2. **GitHub Actions secrets** —— 在仓库 `Settings → Secrets and variables → Actions` 配 runner 跑采集需要的 env，至少要有：
+   - `DATABASE_URL`（必须与 Vercel 用的是**同一个** Postgres）
+   - `DEEPSEEK_API_KEY`（或 `OPENROUTER_API_KEY`）
+   - 可选：`TWITTER_API_KEY`、`FIRECRAWL_API_KEY`、SMTP 全套、`NOTIFICATION_EMAIL`、`WECHAT_WEBHOOK_URL`
+3. 提交 [`.github/workflows/collect.yml`](.github/workflows/collect.yml)。首次定时跑会在 30 分钟内来；想立刻验证：点顶栏 **Fetch** 按钮，或 **Actions → Scheduled collect → Run workflow**
 
 ## 项目结构
 
@@ -192,7 +190,7 @@ GitHub Actions schedule (*/30 * * * *)
 src/
 ├── app/
 │   ├── api/             # API 路由
-│   │   ├── collect/         # 触发采集
+│   │   ├── collect/         # 派发 GitHub Actions workflow（本地 dev 时同进程跑）
 │   │   ├── keywords/        # 关键词 CRUD + AI 扩展
 │   │   ├── notifications/   # 通知列表
 │   │   ├── settings/        # 系统设置 + 测试入口
@@ -272,7 +270,7 @@ npx prisma generate
 npx prisma db execute --stdin <<< 'DELETE FROM "Topic"; DELETE FROM "Notification";'
 
 # 触发一次采集
-curl -X POST http://localhost:3000/api/collect
+npm run collect
 ```
 
 ## 环境变量速查
@@ -291,7 +289,6 @@ curl -X POST http://localhost:3000/api/collect
 | `EMAIL_DIGEST_WINDOW_MS` | | 聚合窗口毫秒，默认 300000（5min） |
 | `EMAIL_DIGEST_MAX_ITEMS` | | 单封 digest 上限，默认 20 |
 | `COLLECTION_CRON` | | 本地 `node-cron` 的频率，默认 `*/30 * * * *`（线上调度走 GitHub Actions，见[部署](#部署vercel--github-actions)） |
-| `CRON_SECRET` | 线上 | GitHub Actions 调用 `/api/collect` 时携带的 Bearer；线上必填，本地可不配 |
 | `CLEAN_RAW_WITH_LLM` | | 是否用 LLM 清洗正文，默认 `true` |
 
 ⭐ = `DEEPSEEK_API_KEY` 或 `OPENROUTER_API_KEY` 至少配置一个

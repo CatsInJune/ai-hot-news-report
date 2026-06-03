@@ -108,13 +108,13 @@ Open [http://localhost:3000](http://localhost:3000).
 
 Go to `/keywords` → add one. The AI will auto-expand variants and detect related accounts.
 
-Trigger a collection manually (runs every 30 min automatically by default):
+Trigger a collection manually — either click the **Fetch** button in the top bar (in dev it runs in-process; in prod it dispatches the GitHub Actions workflow) or run on the CLI:
 
 ```bash
-curl -X POST http://localhost:3000/api/collect
+npm run collect
 ```
 
-Or click the **Fetch** button in the top bar. To pause/resume the schedule (locally or in prod) flip the toggle on the **Settings → 运行时配置** page; collections are then short-circuited at the `collectAll()` entrypoint, so no AI quota is consumed.
+The in-process `node-cron` also fires every 30 min in `dev`. To pause/resume the schedule (locally or in prod) flip the toggle on the **Settings → 运行时配置** page; collections are then short-circuited at the `collectAll()` entrypoint, so no AI quota is consumed.
 
 ## Notification setup
 
@@ -149,44 +149,42 @@ To mirror messages to your **personal WeChat**: in the WeChat Work app → Me �
 
 ## Deployment (Vercel + GitHub Actions)
 
-The project is shipped on Vercel with a hosted PostgreSQL (Vercel Postgres / Neon / etc.). Because Vercel functions are short-lived, the in-process `node-cron` scheduler can't run — scheduling is offloaded to **GitHub Actions**.
+The project is shipped on Vercel with a hosted PostgreSQL (Vercel Postgres / Neon / etc.). Vercel serves the UI + read APIs only; **the collector runs on a GitHub Actions runner** that connects directly to the same Postgres.
 
-### Why GitHub Actions (not Vercel Cron)?
+### Why not let Vercel run the collector?
 
-Vercel Hobby plan limits cron to **once per day** with hourly precision. We want every 30 min. GitHub Actions schedules are free up to the workflow minute quota and easily handle `*/30 * * * *`.
+- Vercel Hobby caps function timeout at **60s**. `collectAll()` regularly runs longer (12 sources + Firecrawl + LLM cleanup + scoring), so the function hits `FUNCTION_INVOCATION_TIMEOUT`.
+- Vercel Hobby Cron is also limited to **once per day** — we want every 30 min.
+
+GitHub Actions sidesteps both: free, generous minute budget, and the runner can run as long as `timeout-minutes` allows.
 
 ### Topology
 
 ```
-GitHub Actions schedule (*/30 * * * *)
-  └─ curl -X POST https://<prod>/api/collect
-       Authorization: Bearer ${CRON_SECRET}
-         └─ Vercel function → collectAll()
-              └─ Postgres + AI analysis + notifications
+Scheduled (every 30 min)                Manual (Fetch button in top bar)
+  GitHub Actions cron *  *  *  *  *      Vercel /api/collect
+                              │                  │
+                              │                  └─ POST workflow_dispatch
+                              │                     (uses GITHUB_TOKEN)
+                              ▼                  ▼
+                  GitHub Actions runner: npm ci + prisma generate + npm run collect
+                              │
+                              └─ scripts/collect.ts → collectAll()
+                                    └─ Postgres (same as Vercel) + AI + email/WeChat
 ```
 
-### `/api/collect` auth model
-
-| Caller | Signal | Allowed? |
-|---|---|---|
-| Browser **Fetch** button (same-origin) | `Sec-Fetch-Site: same-origin` | ✅ |
-| GitHub Actions / curl | `Authorization: Bearer <CRON_SECRET>` | ✅ |
-| Local dev with no `CRON_SECRET` set | — | ✅ |
-| Anything else (public scraping, cross-site fetch) | — | ❌ 401 |
-
-`Sec-Fetch-Site` is a browser-managed [forbidden header](https://developer.mozilla.org/en-US/docs/Glossary/Forbidden_header_name) — JS can't fake it, attacker pages will be `cross-site`.
+Vercel only serves the Next.js app + a thin `/api/collect` that **dispatches** the workflow (it does not run the collector itself).
 
 ### One-time setup
 
-1. `vercel link` and create a Postgres on the **Storage** tab of the project (auto-injects `DATABASE_URL` etc.)
-2. Set non-DB env vars in the Vercel dashboard (one per `.env.example` row).
-3. Generate a shared secret and put it in **both** places:
-   ```bash
-   SEC=$(openssl rand -hex 32)
-   echo "$SEC" | gh secret set CRON_SECRET --repo <owner>/<repo>
-   vercel env add CRON_SECRET production --value "$SEC" --yes
-   ```
-4. Commit [`.github/workflows/collect.yml`](.github/workflows/collect.yml); subsequent merges to `main` deploy automatically.
+1. **Vercel** — `vercel link`, create a Postgres on the **Storage** tab (auto-injects `DATABASE_URL`), then add the non-DB env vars (per `.env.example`). For the Fetch button to work in prod, also set:
+   - `GITHUB_TOKEN` — fine-grained PAT with **Actions: Read and write** permission on this repo
+   - `GITHUB_REPO` — `owner/repo`, e.g. `CatsInJune/ai-hot-news-report`
+2. **GitHub Actions secrets** — copy the runner's env vars into the repo's `Settings → Secrets and variables → Actions`. At minimum:
+   - `DATABASE_URL` (must point to the **same** Postgres Vercel uses)
+   - `DEEPSEEK_API_KEY` (or `OPENROUTER_API_KEY`)
+   - Optional: `TWITTER_API_KEY`, `FIRECRAWL_API_KEY`, SMTP block, `NOTIFICATION_EMAIL`, `WECHAT_WEBHOOK_URL`
+3. Commit [`.github/workflows/collect.yml`](.github/workflows/collect.yml). The first scheduled run lands within 30 min; trigger immediately via the top-bar **Fetch** button or **Actions → Scheduled collect → Run workflow**.
 
 ## Layout
 
@@ -194,7 +192,7 @@ GitHub Actions schedule (*/30 * * * *)
 src/
 ├── app/
 │   ├── api/             # Routes
-│   │   ├── collect/         # Trigger collection
+│   │   ├── collect/         # Dispatch GitHub Actions workflow (or run locally in dev)
 │   │   ├── keywords/        # Keyword CRUD + AI expansion
 │   │   ├── notifications/   # Notification history
 │   │   ├── settings/        # System settings + test hooks
@@ -274,7 +272,7 @@ npx prisma generate
 npx prisma db execute --stdin <<< 'DELETE FROM "Topic"; DELETE FROM "Notification";'
 
 # Trigger one collection cycle
-curl -X POST http://localhost:3000/api/collect
+npm run collect
 ```
 
 ## Env reference
@@ -293,7 +291,6 @@ curl -X POST http://localhost:3000/api/collect
 | `EMAIL_DIGEST_WINDOW_MS` | | Aggregation window in ms, default 300000 (5 min) |
 | `EMAIL_DIGEST_MAX_ITEMS` | | Max items per digest, default 20 |
 | `COLLECTION_CRON` | | Local `node-cron` schedule, default `*/30 * * * *` (prod scheduling is GitHub Actions, see [Deployment](#deployment-vercel--github-actions)) |
-| `CRON_SECRET` | prod | Bearer token GitHub Actions sends when hitting `/api/collect`; required in prod, optional locally |
 | `CLEAN_RAW_WITH_LLM` | | LLM-clean article bodies, default `true` |
 
 ⭐ = at least one of `DEEPSEEK_API_KEY` or `OPENROUTER_API_KEY` must be configured
