@@ -1,9 +1,10 @@
 name: Scheduled collect
 
+# 定时调度交给 cron-job.org（POST workflow_dispatch），GitHub Actions schedule
+# 在 :00 / :30 高峰被严重延迟（实测 2-5 小时一次），不再使用。
+# - cron-job.org 准点触发 → workflow_dispatch
+# - 前端顶栏 Fetch 按钮也是同一个 workflow_dispatch 入口
 on:
-  schedule:
-    # 每 30 分钟触发一次（GitHub Actions cron 用 UTC，高负载时可能延迟几分钟）
-    - cron: "*/30 * * * *"
   workflow_dispatch:
 
 jobs:
