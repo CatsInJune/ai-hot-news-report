@@ -52,3 +52,6 @@ docs/screenshots/
 tmp-*.log
 
 .claude/settings.local.json
+
+# 个人笔记 / 鱼皮版解析，不进 git
+docs/项目深度解析-鱼皮版.md
