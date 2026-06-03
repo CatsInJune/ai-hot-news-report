@@ -26,22 +26,6 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
-      - name: Debug secret integrity
-        env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        run: |
-          # 不会打印值，但 wc -c 不会被 mask
-          echo "DEEPSEEK_API_KEY length: $(printf '%s' "${DEEPSEEK_API_KEY}" | wc -c)"
-          echo "OPENROUTER_API_KEY length: $(printf '%s' "${OPENROUTER_API_KEY}" | wc -c)"
-          echo "DATABASE_URL length: $(printf '%s' "${DATABASE_URL}" | wc -c)"
-          # 验证 OPENROUTER_API_KEY 自身（不依赖 SDK）
-          curl -s -o /tmp/or.json -w "OR /auth/key HTTP %{http_code}\n" \
-            -H "Authorization: Bearer ${OPENROUTER_API_KEY}" \
-            https://openrouter.ai/api/v1/auth/key || true
-          head -c 200 /tmp/or.json | sed 's/sk-or-v1-[^"]*/REDACTED/g' || true; echo
-
       - name: Run collect
         env:
           # 数据库
