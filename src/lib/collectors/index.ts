@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getCollectionEnabled } from "@/lib/runtime-settings";
+import { getCollectionEnabled, setLastCollectionAt } from "@/lib/runtime-settings";
 import { analyzeBatch } from "@/lib/analyzer";
 import { expandKeyword, preMatchKeyword } from "@/lib/keyword-expander";
 import { detectAccounts } from "@/lib/account-detector";
@@ -436,6 +436,13 @@ export async function collectAll(): Promise<{
       `analyzed=${analyses.size} new=${newCount} hit=${hitCount} ` +
       `dropped(title=${droppedByTitle}, age=${droppedByAge}, spam=${droppedBySpam}, relev=${droppedByRelev}, quota=${droppedByQuota})`
   );
+
+  // 记录最近一次采集完成时间（顶栏展示用）。失败不影响主流程
+  try {
+    await setLastCollectionAt(new Date());
+  } catch (err) {
+    console.error("[Collect] setLastCollectionAt 失败:", err);
+  }
 
   return {
     total: deduped.length,

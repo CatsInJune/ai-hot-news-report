@@ -10,6 +10,23 @@ import MultiSelectDropdown from "./MultiSelectDropdown";
 import SearchBox from "@/components/layout/SearchBox";
 import { cn } from "@/lib/utils";
 
+// 具体时间：今天显示 HH:mm；跨天显示 MM-DD HH:mm
+function formatCollectionTime(iso: string | null): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  const hh = pad(d.getHours());
+  const mm = pad(d.getMinutes());
+  const now = new Date();
+  const sameDay =
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate();
+  if (sameDay) return `${hh}:${mm}`;
+  return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${hh}:${mm}`;
+}
+
 interface Topic {
   id: string;
   title: string;
@@ -100,6 +117,7 @@ export default function TopicFeed() {
   const [q, setQ] = useState("");
   const [debouncedQ, setDebouncedQ] = useState("");
   const [sourceCounts, setSourceCounts] = useState<Record<string, number>>({});
+  const [lastCollectionAt, setLastCollectionAt] = useState<string | null>(null);
 
   // 新增的筛选状态
   const [range, setRange] = useState("all");
@@ -236,10 +254,15 @@ export default function TopicFeed() {
     let cancelled = false;
     const tick = async () => {
       try {
-        const res = await fetch(`/api/topics?stats=sources`);
-        if (!res.ok || cancelled) return;
-        const data = await res.json();
-        if (!cancelled) setSourceCounts(data.counts ?? {});
+        const [sourcesRes, statsRes] = await Promise.all([
+          fetch(`/api/topics?stats=sources`).then((r) => (r.ok ? r.json() : null)),
+          fetch(`/api/topics?stats=1`).then((r) => (r.ok ? r.json() : null)),
+        ]);
+        if (cancelled) return;
+        if (sourcesRes) setSourceCounts(sourcesRes.counts ?? {});
+        if (statsRes && "lastCollectionAt" in statsRes) {
+          setLastCollectionAt(statsRes.lastCollectionAt);
+        }
       } catch {
         /* silent */
       }
@@ -387,6 +410,17 @@ export default function TopicFeed() {
                 {SORT_OPTIONS.find((o) => o.value === sort)?.label}
               </span>{" "}
               <span className="text-text-faint">({SORT_HINT_BY_KEY[sort]})</span>
+              {lastCollectionAt && (
+                <span
+                  className="ml-2 text-text-faint"
+                  title={`最近采集：${new Date(lastCollectionAt).toLocaleString()}`}
+                >
+                  · 采集于{" "}
+                  <span className="tabular-nums text-text-secondary">
+                    {formatCollectionTime(lastCollectionAt)}
+                  </span>
+                </span>
+              )}
             </>
           )}
         </div>
