@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Activity,
@@ -26,11 +26,31 @@ interface Stats {
   today: number;
 }
 
+// 直接查 GitHub Actions Workflow Runs API 拿真实 runner 状态。
+// 轮询间隔短一点，因为 GitHub 给的 rate limit 是 5000 req/hour，5s 完全够用
+const POLL_INTERVAL_MS = 5 * 1000;
+// 兜底：runner timeout-minutes=15，再宽容到 18min 后强制撤 loading
+const MAX_WAIT_MS = 18 * 60 * 1000;
+
+interface RunSnapshot {
+  id: number;
+  status: string; // queued / in_progress / completed / waiting
+  conclusion: string | null; // success / failure / cancelled / null(未完成)
+  createdAt: string;
+  htmlUrl: string;
+  event: string;
+}
+
+type RunPhase = "idle" | "queued" | "running" | "done";
+
 export default function TopBar() {
   const pathname = usePathname();
   const [stats, setStats] = useState<Stats>({ total: 0, today: 0 });
   const [unread, setUnread] = useState(0);
   const [collecting, setCollecting] = useState(false);
+  const [runPhase, setRunPhase] = useState<RunPhase>("idle");
+  // 派发时记录的"已存在最新 run id"，用来识别"刚 dispatch 的那次"
+  const baselineRunIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -60,21 +80,89 @@ export default function TopBar() {
     };
   }, []);
 
+  // 拉一次本仓库 collect.yml 的最近 runs（拿头几条用来识别"本次"）
+  const fetchLatestRuns = async (): Promise<RunSnapshot[]> => {
+    try {
+      const r = await fetch("/api/collect/status", { cache: "no-store" });
+      if (!r.ok) return [];
+      const j = await r.json();
+      if (!j?.ok || !Array.isArray(j.runs)) return [];
+      return j.runs as RunSnapshot[];
+    } catch {
+      return [];
+    }
+  };
+
+  // 派发后轮询：找到 id > baseline 的新 run，跟它跑到 completed 为止
+  const waitForRunCompletion = async () => {
+    const startedAt = Date.now();
+    let trackedRun: RunSnapshot | null = null;
+
+    while (Date.now() - startedAt < MAX_WAIT_MS) {
+      const runs = await fetchLatestRuns();
+      if (!trackedRun) {
+        // 还没识别到"本次"run。找 id 严格大于 baseline 的最新一条
+        const candidate = runs.find(
+          (r) =>
+            r.event === "workflow_dispatch" &&
+            (baselineRunIdRef.current === null || r.id > baselineRunIdRef.current),
+        );
+        if (candidate) {
+          trackedRun = candidate;
+          setRunPhase(candidate.status === "queued" ? "queued" : "running");
+        }
+      } else {
+        // 已锁定本次 run，持续刷状态
+        const fresh = runs.find((r) => r.id === trackedRun!.id);
+        if (fresh) {
+          trackedRun = fresh;
+          if (fresh.status === "queued") setRunPhase("queued");
+          else if (fresh.status === "in_progress") setRunPhase("running");
+          else if (fresh.status === "completed") {
+            setRunPhase("done");
+            window.dispatchEvent(new Event("app:data-changed"));
+            return;
+          }
+        }
+      }
+      await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    }
+    // 超时兜底
+    setRunPhase("done");
+  };
+
   const handleCollect = async () => {
+    if (collecting) return;
     setCollecting(true);
+    setRunPhase("queued");
+    // 派发前拿一次最新 run 列表，记录最大 id 作为 baseline
+    const before = await fetchLatestRuns();
+    baselineRunIdRef.current = before.length > 0 ? before[0].id : null;
+
     try {
       const res = await fetch("/api/collect", { method: "POST" });
       const body = await res.json().catch(() => ({}));
-      // workflow_dispatch 模式下 runner 启动需 ~30-60s，给点 UI 反馈
       if (body?.mode === "workflow_dispatch") {
-        setTimeout(() => setCollecting(false), 1500);
-      } else {
-        setCollecting(false);
+        await waitForRunCompletion();
       }
+      // 本地 dev 模式（mode=local）：collectAll 同步完成，直接结束
     } catch {
+      /* swallow */
+    } finally {
       setCollecting(false);
+      // 短延迟后回 idle，避免按钮文案瞬切
+      setTimeout(() => setRunPhase("idle"), 1500);
     }
   };
+
+  const collectLabel =
+    runPhase === "queued"
+      ? "排队中"
+      : runPhase === "running"
+        ? "采集中"
+        : runPhase === "done"
+          ? "已完成"
+          : "Fetch";
 
   return (
     <header className="sticky top-0 z-30 glass-panel">
@@ -157,9 +245,7 @@ export default function TopBar() {
             <RefreshCcw
               className={cn("w-3.5 h-3.5", collecting && "animate-spin")}
             />
-            <span className="hidden md:inline">
-              {collecting ? "Dispatching" : "Fetch"}
-            </span>
+            <span className="hidden md:inline">{collectLabel}</span>
           </button>
         </div>
       </div>
