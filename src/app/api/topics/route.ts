@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { normalizeTopicUrl } from "@/lib/utils";
 import { sortTopics, type SortKey } from "@/lib/topic-scoring";
+import { getLastCollectionAt } from "@/lib/runtime-settings";
 import type { Prisma } from "@/generated/prisma/client";
 
 // 时间范围 → 起始时间
@@ -33,12 +34,16 @@ export async function GET(req: NextRequest) {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    const [total, today] = await Promise.all([
+    const [total, today, lastCollectionAt] = await Promise.all([
       prisma.topic.count(),
       prisma.topic.count({ where: { createdAt: { gte: todayStart } } }),
+      getLastCollectionAt(),
     ]);
 
-    return NextResponse.json({ stats: { total, today } });
+    return NextResponse.json({
+      stats: { total, today },
+      lastCollectionAt: lastCollectionAt?.toISOString() ?? null,
+    });
   }
 
   if (stats === "sources") {
