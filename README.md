@@ -258,6 +258,18 @@ So 5 hits in a minute = 1 email + 1 WeChat message, not 5 + 5.
 
 DeepSeek direct API is preferred (`deepseek-chat`, ~10× cheaper). Falls back to OpenRouter when `DEEPSEEK_API_KEY` is unset. Switching logic lives in `src/lib/openrouter.ts`.
 
+## Reusable skill: `hot-news-search`
+
+This repo also ships [`skills/hot-news-search/`](skills/hot-news-search/) — a **portable skill that packages this project's core capability** (multi-source collection + the project's own 6-dimension scoring) into a self-contained module that can be dropped into **any agent harness that supports the Anthropic skill format** (Claude Code, Claude Desktop, the Agent SDK, custom agent runtimes). It is *not* part of the running service; the running service is the thing being wrapped.
+
+Think of it as: "the collector + analyzer of this project, repackaged as something an agent can call to produce an on-demand single-keyword briefing."
+
+- **What it encapsulates**: the same 11 public sources the production collector uses (Twitter / HN / Reddit / arXiv / Bing / Google / Baidu / Sogou / Weibo / Bilibili / AI blogs / Chinese AI media), plus the project's 6-dimension scoring spec (relevance / importance / spam / …), exposed as a 4-step deterministic pipeline (fetch → score → filter → write).
+- **What an agent gets**: invoke it with a keyword, get back a TopicCard-styled Markdown briefing. Typical triggers: "what's new with Sora 2 lately", "make me a DeepSeek V4 briefing", "round up GPT-5 Bilibili videos + arxiv papers".
+- **Portability**: the fetcher (`scripts/fetch_news.py`) is **pure Python stdlib, zero deps**, so any host that can shell out to `python3` can use it. It reads `TWITTER_API_KEY` from the env (skipped if unset), no project DB / Next.js runtime required.
+
+Use it as both a reusable tool **and** a reference for how to repackage a project's core capability into a portable skill. Full spec: [`skills/hot-news-search/SKILL.md`](skills/hot-news-search/SKILL.md).
+
 ## Common commands
 
 ```bash
