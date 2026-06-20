@@ -135,7 +135,7 @@ export async function collectAll(): Promise<{
   hitCount: number;
   results: CollectResult[];
   analyzed: number;
-  dropped: { title: number; age: number; spam: number; relev: number; quota: number };
+  dropped: { title: number; titleCross: number; age: number; spam: number; relev: number; quota: number };
   skipped?: boolean;
 }> {
   if (!(await getCollectionEnabled())) {
@@ -145,7 +145,7 @@ export async function collectAll(): Promise<{
       hitCount: 0,
       results: [],
       analyzed: 0,
-      dropped: { title: 0, age: 0, spam: 0, relev: 0, quota: 0 },
+      dropped: { title: 0, titleCross: 0, age: 0, spam: 0, relev: 0, quota: 0 },
       skipped: true,
     };
   }
@@ -202,9 +202,26 @@ export async function collectAll(): Promise<{
   const fresh = freshAll.filter((d) => d.topic.publishedAt >= ageLimit);
   const droppedByAge = freshAll.length - fresh.length;
 
+  // 同源同标题跨轮次去重（搜索引擎重定向 URL 每次不同，但指向同一文章）
+  const sourcesInFresh = [...new Set(fresh.map((d) => d.topic.source))];
+  const existingRecent = await prisma.topic.findMany({
+    where: {
+      source: { in: sourcesInFresh },
+      publishedAt: { gte: ageLimit },
+    },
+    select: { title: true, source: true },
+  });
+  const existingTitleSet = new Set(
+    existingRecent.map((e) => `${e.source}::${normalizeTitle(e.title)}`),
+  );
+  const freshDeduped = fresh.filter(
+    (d) => !existingTitleSet.has(`${d.topic.source}::${normalizeTitle(d.topic.title)}`),
+  );
+  const droppedByTitleCross = fresh.length - freshDeduped.length;
+
   // AI 分析（带 pre-match hint）
   // 订阅来源（账号 timeline）走"订阅模式"评分：评估"值不值得看"，而不是"是否在讲鱼皮"
-  const analyzeInput = fresh.map((d, i) => {
+  const analyzeInput = freshDeduped.map((d, i) => {
     const aliases = aliasMap.get(d.keywordId) ?? [d.keywordName];
     const fullText = `${d.topic.title}\n${d.topic.summary ?? ""}`;
     const preMatch = d.topic.subscribed
@@ -228,8 +245,8 @@ export async function collectAll(): Promise<{
   // 按源分组并按 (relevScore desc, hotScore desc) 排序，准备应用配额
   type Candidate = { idx: number; item: CollectedItem; relev: number; hot: number };
   const bySource = new Map<string, Candidate[]>();
-  for (let i = 0; i < fresh.length; i++) {
-    const item = fresh[i];
+  for (let i = 0; i < freshDeduped.length; i++) {
+    const item = freshDeduped[i];
     const a = analyses.get(String(i));
     if (!a) continue;
     if (a.isSpam) continue;
@@ -260,7 +277,7 @@ export async function collectAll(): Promise<{
   let droppedByQuota = 0;
 
   // 统计被过滤的原因（细致 log）
-  for (let i = 0; i < fresh.length; i++) {
+  for (let i = 0; i < freshDeduped.length; i++) {
     const a = analyses.get(String(i));
     if (!a) continue;
     if (a.isSpam) droppedBySpam++;
@@ -432,9 +449,9 @@ export async function collectAll(): Promise<{
   }
 
   console.log(
-    `[Collect] total=${deduped.length} titleDeduped=${titleDeduped.length} fresh=${fresh.length} ` +
+    `[Collect] total=${deduped.length} titleDeduped=${titleDeduped.length} fresh=${freshDeduped.length} ` +
       `analyzed=${analyses.size} new=${newCount} hit=${hitCount} ` +
-      `dropped(title=${droppedByTitle}, age=${droppedByAge}, spam=${droppedBySpam}, relev=${droppedByRelev}, quota=${droppedByQuota})`
+      `dropped(title=${droppedByTitle}, titleCross=${droppedByTitleCross}, age=${droppedByAge}, spam=${droppedBySpam}, relev=${droppedByRelev}, quota=${droppedByQuota})`
   );
 
   // 记录最近一次采集完成时间（顶栏展示用）。失败不影响主流程
@@ -452,6 +469,7 @@ export async function collectAll(): Promise<{
     analyzed: analyses.size,
     dropped: {
       title: droppedByTitle,
+      titleCross: droppedByTitleCross,
       age: droppedByAge,
       spam: droppedBySpam,
       relev: droppedByRelev,

@@ -214,6 +214,7 @@ export default function TopicFeed() {
     const clamped = Math.max(1, Math.min(pageCount, next));
     if (clamped === pageRef.current) return;
     shouldScrollToTopRef.current = true;
+    setLoading(true);
     setPage(clamped);
   }, [pageCount]);
 
