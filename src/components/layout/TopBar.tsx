@@ -8,7 +8,6 @@ import {
   Activity,
   Bell,
   RefreshCcw,
-  Settings2,
   Sparkles,
   LayoutGrid,
 } from "lucide-react";
@@ -18,7 +17,6 @@ const NAV = [
   { href: "/", label: "Feed", icon: LayoutGrid },
   { href: "/keywords", label: "Keywords", icon: Sparkles },
   { href: "/notifications", label: "Alerts", icon: Bell },
-  { href: "/settings", label: "Settings", icon: Settings2 },
 ];
 
 interface Stats {
