@@ -141,7 +141,13 @@ function buildSubject(items: AlertItem[]): string {
  * 用 table 布局拼模板，避免 Gmail/Outlook 对 flex 的支持差。
  * 整体仍是深色卡片视觉，但所有结构都是 table-row。
  */
-function buildDigestHtml(items: AlertItem[]): string {
+/** 应用主页，用于邮件 footer 提供"打开应用"入口 */
+function getAppUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  return raw && raw.startsWith("http") ? raw.replace(/\/$/, "") : "https://ai-hot-news-report.vercel.app";
+}
+
+export function buildDigestHtml(items: AlertItem[]): string {
   const itemBlocks = items.map((it) => renderItem(it)).join("");
   const count = items.length;
   const keywords = Array.from(new Set(items.map((i) => i.keyword)));
@@ -178,6 +184,11 @@ function buildDigestHtml(items: AlertItem[]): string {
           </tr>
           <tr>
             <td style="padding:16px 24px 24px;border-top:1px solid #1f1f2e;">
+              <div style="margin-bottom:12px;">
+                <a href="${encodeAttr(getAppUrl())}" style="display:inline-block;padding:9px 18px;background:#1a1a26;color:#5eead4;text-decoration:none;border:1px solid #1f3a35;border-radius:6px;font-family:monospace;font-size:12px;font-weight:600;letter-spacing:0.03em;">
+                  📡 打开 AI 热点速报
+                </a>
+              </div>
               <div style="font-family:monospace;font-size:11px;color:#475569;">
                 本邮件按 5 分钟窗口聚合，避免轰炸。<br>
                 由 AI 热点速报工具自动发送。

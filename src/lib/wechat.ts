@@ -12,9 +12,15 @@ import { SOURCE_LABELS, type SourceType } from "@/types";
 import type { AlertItem } from "./mailer";
 
 const MAX_BYTES = 3800; // 留点 buffer，4096 是硬上限
-const MAX_LINES_DEFAULT = parseInt(
-  process.env.WECHAT_DIGEST_MAX_LINES ?? "5",
-);
+// GitHub Actions 把未设的 secret 注入成 ""，?? 不接管空串 → parseInt("") = NaN
+const _maxLinesParsed = parseInt(process.env.WECHAT_DIGEST_MAX_LINES || "5", 10);
+const MAX_LINES_DEFAULT = Number.isFinite(_maxLinesParsed) && _maxLinesParsed > 0 ? _maxLinesParsed : 5;
+
+/** 应用主页地址，用于在通知里附"查看完整列表"入口 */
+function getAppUrl(): string {
+  const raw = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  return raw && raw.startsWith("http") ? raw.replace(/\/$/, "") : "https://ai-hot-news-report.vercel.app";
+}
 
 /** 解析 env：支持单个 URL 或逗号分隔多个 */
 export function getWechatWebhookUrls(): string[] {
@@ -124,7 +130,7 @@ function importanceColor(importance?: string): "warning" | "info" | "comment" {
  * 用 importance 排序，urgent 在前。
  * 截断到 MAX_LINES 条，剩余只显示数字。
  */
-function buildDigestMarkdown(itemsRaw: AlertItem[]): string {
+export function buildDigestMarkdown(itemsRaw: AlertItem[]): string {
   // 按 importance 降序
   const order = (i: AlertItem) =>
     i.importance === "urgent" ? 0 : i.importance === "high" ? 1 : 2;
@@ -152,7 +158,10 @@ function buildDigestMarkdown(itemsRaw: AlertItem[]): string {
       : `**🔥 ${items.length} 条命中提醒**　${tagParts.join(" ")}`;
 
   const blocks = shown.map((it) => renderItemBlock(it));
-  const footer = overflow > 0 ? `\n\n> 余下 ${overflow} 条未在此展示（已写入邮件 digest / 应用首页）` : "";
+  const overflowLine = overflow > 0 ? `\n\n> 余下 ${overflow} 条未在此展示（已写入邮件 digest / 应用首页）` : "";
+  const appUrl = getAppUrl();
+  const appLine = `\n\n> [📡 打开 AI 热点速报](${appUrl})`;
+  const footer = `${overflowLine}${appLine}`;
 
   let content = `${header}\n\n关键词 ${keywordStr}\n\n---\n\n${blocks.join("\n\n---\n\n")}${footer}`;
 
