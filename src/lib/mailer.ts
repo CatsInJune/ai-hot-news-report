@@ -24,7 +24,8 @@ function createTransporter() {
 
   return nodemailer.createTransport({
     host,
-    port: parseInt(process.env.SMTP_PORT ?? "587"),
+    // GitHub Actions 把未设的 secret 注入成 ""，?? 不接管空字符串 → parseInt("") = NaN
+    port: parseInt(process.env.SMTP_PORT || "587", 10),
     secure: process.env.SMTP_SECURE === "true",
     auth: { user, pass },
   });

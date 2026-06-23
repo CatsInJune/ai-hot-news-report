@@ -17,10 +17,19 @@ import { prisma } from "@/lib/prisma";
 import { sendKeywordDigest, type AlertItem } from "./mailer";
 import { sendWechatDigest, getWechatWebhookUrls } from "./wechat";
 
-const DIGEST_WINDOW_MS = parseInt(
-  process.env.EMAIL_DIGEST_WINDOW_MS ?? String(5 * 60 * 1000),
-);
-const DIGEST_MAX_ITEMS = parseInt(process.env.EMAIL_DIGEST_MAX_ITEMS ?? "20");
+// GitHub Actions 把未设的 secret 注入成空字符串 ""，?? 只兜 null/undefined，
+// 会让 parseInt("") = NaN 穿透：setTimeout(fn, NaN) ≈ setTimeout(fn, 0)，
+// 聚合窗口实际变 0，每条命中都会立刻 flush → 微信/邮件刷屏。
+// 用 || + Number.isFinite 双保险。
+function intEnv(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+const DIGEST_WINDOW_MS = intEnv("EMAIL_DIGEST_WINDOW_MS", 5 * 60 * 1000);
+const DIGEST_MAX_ITEMS = intEnv("EMAIL_DIGEST_MAX_ITEMS", 20);
 
 interface QueuedItem {
   item: AlertItem;
